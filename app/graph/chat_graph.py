@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.graph.state import State
-from app.graph.nodes import retrieve_context, generate_response
+from app.graph.nodes import retrieve_context, generate_response, summarize_conversation
 from app.database.postgres import get_postgres_saver, get_postgres_store
 import os
 from dotenv import load_dotenv
@@ -19,6 +19,8 @@ from typing import Optional
 # Load environment variables
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+
 # logger = logging.getLogger(__name__)
 #
 # # PostgreSQL settings
@@ -68,6 +70,10 @@ logger = logging.getLogger(__name__)
 # # Inicializar PostgresStore con el mismo pool
 # store = PostgresStore(pool)
 
+def should_summarize(state: State) -> str:
+    """Decide si resumir o continuar."""
+    return "summarize_conversation" if len(state["chat_history"]) > 6 else "generate_response"
+
 
 def create_chat_graph():
     """
@@ -83,10 +89,12 @@ def create_chat_graph():
         # Add the nodes
         workflow.add_node("retrieve_context", retrieve_context)
         workflow.add_node("generate_response", generate_response)
+        workflow.add_node("summarize_conversation", summarize_conversation)
 
         # Define the flow
         workflow.add_edge(START, "retrieve_context")
-        workflow.add_edge("retrieve_context", "generate_response")
+        workflow.add_conditional_edges("retrieve_context", should_summarize)
+        workflow.add_edge("summarize_conversation", "generate_response")
         workflow.add_edge("generate_response", END)
 
         # Get the PostgreSQL saver for persistence

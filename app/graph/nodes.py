@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
@@ -35,52 +35,52 @@ def retrieve_context(state: State) -> State:
 
 def generate_response(state: State) -> Dict[str, Any]:
     """
-    Generate a response based on chat history and context.
+    Generate a response based on chat history, context, and summary.
 
     Args:
-        state: The current state including user input and chat history
+        state: The current state including user input, chat history, and context.
 
     Returns:
-        Updated state with the answer
+        Updated state with the generated answer.
     """
     try:
-        # Initialize the LLM
         llm = ChatOpenAI(model=LLM_MODEL)
 
-        # Define the system prompt based on context
-        system_message = "You are a helpful, friendly assistant. "
+        # Construir el mensaje del sistema con el contexto y resumen
+        system_message = "You are a helpful, friendly assistant."
 
-        # Add retrieved documents if available
-        context = ""
+        # Agregar el contexto de documentos si existe
         if state.get("documents") and state["documents"]:
             context = "\n\n".join([doc.page_content for doc in state["documents"]])
-            system_message += "Use the following context to help answer the question: "
-            system_message += f"{context}\n\n"
+            system_message += f"\nUse the following context to answer: {context}\n"
 
-        system_message += "Be concise and clear in your responses."
+        # Agregar resumen si existe
+        summary = state.get("summary", "")
+        if summary:
+            system_message += f"\nSummary of the conversation so far: {summary}\n"
 
-        # Define the chat prompt
+        system_message += "\nBe concise and clear in your responses."
+
+        # Limitar la cantidad de mensajes en el historial
+        recent_messages = state["chat_history"][-5:]  # Últimos 5 mensajes
+
+        # Construir el prompt con historial y nuevo input
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}")
         ])
 
-        # Create the chain
+        # Ejecutar la cadena del modelo
         chain = prompt | llm | StrOutputParser()
-
-        # Invoke the chain
         response = chain.invoke({
-            "chat_history": state["chat_history"],
+            "chat_history": recent_messages,
             "input": state["input"]
         })
 
-
-        # Set the answer
+        # Guardar la respuesta y actualizar el historial de chat
         state["answer"] = response
-
-        # Update chat history with the new exchange
-        state["chat_history"] = state["chat_history"] + [
+        state["chat_history"] += [
             HumanMessage(content=state["input"]),
             AIMessage(content=response)
         ]
@@ -90,5 +90,32 @@ def generate_response(state: State) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
-        error_message = "I'm sorry, I encountered an error generating a response. Please try again."
-        raise Exception(error_message)
+        raise Exception("I'm sorry, I encountered an error generating a response.")
+
+
+def summarize_conversation(state: State) -> Dict[str, Any]:
+    """
+    Summarizes the conversation and removes old messages.
+
+    Args:
+        state: The current state including chat history.
+
+    Returns:
+        Updated state with summary and trimmed messages.
+    """
+    llm = ChatOpenAI(model=LLM_MODEL)
+
+    summary = state.get("summary", "")
+    summary_prompt = (
+        f"This is the current summary: {summary}\nExtend it with the new messages:"
+        if summary else "Create a summary of the conversation above:"
+    )
+
+    # Agregar el prompt al historial y ejecutar el resumen con el modelo
+    messages = state["chat_history"] + [HumanMessage(content=summary_prompt)]
+    response = llm.invoke(messages)
+
+    # Eliminar todos los mensajes excepto los 2 más recientes
+    delete_messages = [RemoveMessage(id=m.id) for m in state["chat_history"][:-2]]
+
+    return {"summary": response.content, "chat_history": delete_messages}
