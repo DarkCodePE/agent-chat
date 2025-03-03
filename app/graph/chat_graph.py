@@ -20,56 +20,6 @@ from typing import Optional
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-
-# logger = logging.getLogger(__name__)
-#
-# # PostgreSQL settings
-# POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-# POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-# POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-# POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "123456")
-# POSTGRES_DB = os.getenv("POSTGRES_DB", "chat_rag")
-#
-# # Connection pool settings
-# DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
-# DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
-# DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-# DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))  # 30 minutes
-# DB_CONNECTION_RETRIES = int(os.getenv("DB_CONNECTION_RETRIES", "5"))
-# DB_RETRY_DELAY = int(os.getenv("DB_RETRY_DELAY", "5"))  # seconds
-#
-# # URL de la base de datos
-# SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-# #print(SQLALCHEMY_DATABASE_URL)
-# # Configuración del engine y creación de la sesión
-# engine = create_engine(
-#     SQLALCHEMY_DATABASE_URL,
-#     pool_size=DB_POOL_SIZE,
-#     max_overflow=DB_MAX_OVERFLOW,
-#     pool_timeout=DB_POOL_TIMEOUT,
-#     pool_pre_ping=True  # Opcional: ayuda a mantener las conexiones activas
-# )
-#
-# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-#
-# # Configurar el pool y PostgresSaver
-# connection_kwargs = {
-#     "autocommit": True,
-#     "prepare_threshold": 0,
-#     "row_factory": dict_row
-# }
-#
-# pool = ConnectionPool(
-#     conninfo=SQLALCHEMY_DATABASE_URL,
-#     max_size=10,
-#     kwargs=connection_kwargs,
-# )
-#
-# checkpointer = PostgresSaver(pool)
-# checkpointer.setup()
-# # Inicializar PostgresStore con el mismo pool
-# store = PostgresStore(pool)
-
 def should_summarize(state: State) -> str:
     """Decide si resumir o continuar."""
     return "summarize_conversation" if len(state["chat_history"]) > 6 else "generate_response"

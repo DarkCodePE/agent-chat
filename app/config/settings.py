@@ -29,8 +29,16 @@ API_WORKERS = int(os.getenv("API_WORKERS", "2"))
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+#VECTOR STORE
+QDRANT_URL = os.getenv("QDRANT_URL", "https://your-qdrant-url")  # Reemplázalo con tu URL real
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")  # Asegúrate de que esté en tu .env
+
+# Google Drive settings
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
 # Logging settings
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
 
 # Build connection strings
 def get_sync_connection_string() -> str:

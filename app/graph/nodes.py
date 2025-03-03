@@ -1,18 +1,36 @@
 import logging
 from typing import Dict, Any
 
+from dotenv import load_dotenv
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.output_parsers import StrOutputParser
+from langchain_qdrant import Qdrant
+from qdrant_client import QdrantClient
 
 from app.graph.state import State
-from app.config.settings import LLM_MODEL
+from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
+from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
 
+# Singleton document service
+_document_service = None
 
-def retrieve_context(state: State) -> State:
+def get_document_service() -> DocumentService:
+    """Get or create a DocumentService singleton."""
+    global _document_service
+    if _document_service is None:
+        try:
+            _document_service = DocumentService()
+        except Exception as e:
+            logger.error(f"Error initializing document service: {str(e)}")
+            raise
+    return _document_service
+
+async def retrieve_context(state: State) -> State:
     """
     Retrieve relevant context based on the user's input.
 
@@ -25,11 +43,46 @@ def retrieve_context(state: State) -> State:
     Returns:
         The updated state with context
     """
-    # This is a placeholder implementation
-    # In a real application, you would implement RAG here
+    query_text = state["input"]
 
-    # For now, we're just passing through the state
+    # Get the document service
+    document_service = get_document_service()
 
+    # Search for relevant documents
+    search_results = await document_service.search_documents(query_text, limit=5)
+
+    # Convert to LangChain Document objects
+    documents = []
+    for result in search_results:
+        doc = Document(
+            page_content=result["content"],
+            metadata={
+                **result["metadata"],
+                "score": result["score"],
+                "document_id": result["id"]
+            }
+        )
+        documents.append(doc)
+
+    # Build context text from documents
+    if documents:
+        context_parts = []
+        for i, doc in enumerate(documents, 1):
+            # Extract title or use a default
+            title = doc.metadata.get("name", f"Document {i}")
+            # Add source info and content
+            context_parts.append(f"Document {i}: {title}\n{doc.page_content}")
+
+        # Join all parts with clear separators
+        context = "\n\n---\n\n".join(context_parts)
+    else:
+        context = ""
+
+    # Update state
+    state["documents"] = documents
+    state["context"] = context
+
+    logger.info(f"Retrieved {len(documents)} relevant documents for query: {query_text[:50]}...")
     return state
 
 
@@ -50,19 +103,22 @@ def generate_response(state: State) -> Dict[str, Any]:
         system_message = "You are a helpful, friendly assistant."
 
         # Agregar el contexto de documentos si existe
-        if state.get("documents") and state["documents"]:
-            context = "\n\n".join([doc.page_content for doc in state["documents"]])
-            system_message += f"\nUse the following context to answer: {context}\n"
+        context = state.get("context", "")
+        if context:
+            system_message += f"\n\nUse the following context to help answer the question:\n{context}\n"
+        elif state.get("documents") and state["documents"]:
+            document_context = "\n\n".join([doc.page_content for doc in state["documents"]])
+            system_message += f"\n\nUse the following context to help answer the question:\n{document_context}\n"
 
         # Agregar resumen si existe
         summary = state.get("summary", "")
         if summary:
-            system_message += f"\nSummary of the conversation so far: {summary}\n"
+            system_message += f"\n\nSummary of the conversation so far: {summary}\n"
 
-        system_message += "\nBe concise and clear in your responses."
+        system_message += "\nBe concise and clear in your responses. If the context doesn't contain relevant information to answer the question, say so and answer based on your knowledge."
 
         # Limitar la cantidad de mensajes en el historial
-        recent_messages = state["chat_history"][-5:]  # Últimos 5 mensajes
+        recent_messages = state["chat_history"][-5:] if len(state["chat_history"]) > 5 else state["chat_history"]
 
         # Construir el prompt con historial y nuevo input
         prompt = ChatPromptTemplate.from_messages([

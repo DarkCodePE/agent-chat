@@ -3,7 +3,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import chat
+from app.routers import chat, documents
 from app.config.settings import API_HOST, API_PORT, API_WORKERS, LOG_LEVEL
 from app.database.postgres import check_postgres_connection, close_postgres_connections
 from app.database.engine import close_connections
@@ -35,6 +35,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat.router)
+app.include_router(documents.router)  # Add the documents router
 
 
 @app.get("/health")
