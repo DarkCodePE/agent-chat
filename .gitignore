@@ -1,9 +1,12 @@
-# Environment variables
+# .gitignore
+#google-credentials.json
+.env.prod
 .env
+config/chatbot-secrets.yaml
+config/google-credentials.json
 .env.local
-.env.*.local
-
-# Python
+node_modules/
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+.vercel
+.venv

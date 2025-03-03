@@ -49,8 +49,9 @@ async def process_message(
         }
 
         # Invoke the graph with the initial state and configuration
+        # Use ainvoke instead of invoke since retrieve_context is async
         logger.info(f"Processing message in thread {thread_id}")
-        result = graph.invoke(initial_state, config)
+        result = await graph.ainvoke(initial_state, config)
         logger.info(f"Final state: {result}")
         return {
             "thread_id": thread_id,

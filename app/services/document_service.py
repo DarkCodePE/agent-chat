@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from app.config.settings import QDRANT_URL, QDRANT_API_KEY, OPENAI_API_KEY
-from app.utils.text_extractor import TextExtractor
+from app.util.text_extractor import TextExtractor
 
 logger = logging.getLogger(__name__)
 

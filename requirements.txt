@@ -27,3 +27,6 @@ langgraph-checkpoint-postgres
 IPython
 asyncpg
 psycopg
+google-auth
+google-api-python-client
+python-dateutil

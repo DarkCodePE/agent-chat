@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Singleton document service
 _document_service = None
 
+
 def get_document_service() -> DocumentService:
     """Get or create a DocumentService singleton."""
     global _document_service
@@ -29,6 +30,7 @@ def get_document_service() -> DocumentService:
             logger.error(f"Error initializing document service: {str(e)}")
             raise
     return _document_service
+
 
 async def retrieve_context(state: State) -> State:
     """
