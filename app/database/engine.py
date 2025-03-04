@@ -101,10 +101,29 @@ async def get_async_db():
 
 def close_connections():
     """Close all database connections on application shutdown."""
+    _sync_engine = get_engine()
+    _async_engine = get_async_engine()
     if _sync_engine:
         _sync_engine.dispose()
         logger.info("Synchronous database connections closed")
 
+        # Para el motor asíncrono, no podemos usar await directamente aquí
+        # ya que esta función no es asíncrona
     if _async_engine:
-        _async_engine.dispose()
-        logger.info("Asynchronous database connections closed")
+        # Programamos la tarea para que se ejecute
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_async_engine.dispose())
+            else:
+                # Si no hay un bucle en ejecución, creamos uno temporal
+                asyncio.run(_async_engine.dispose())
+        except Exception as e:
+            logger.error(f"Error closing async engine: {str(e)}")
+
+        logger.info("Asynchronous database connections scheduled for closure")
+
+        # Reseteamos las referencias
+    _sync_engine = None
+    _async_engine = None

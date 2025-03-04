@@ -122,7 +122,7 @@ async def search_documents(
         List of relevant documents
     """
     try:
-        results = await document_service.search_documents(search_query.query, search_query.limit)
+        results = document_service.search_documents(search_query.query, search_query.limit)
 
         return {
             "results": results,

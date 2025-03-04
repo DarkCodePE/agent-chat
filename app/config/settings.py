@@ -22,7 +22,7 @@ DB_RETRY_DELAY = int(os.getenv("DB_RETRY_DELAY", "5"))  # seconds
 
 # API settings
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", "9024"))
+API_PORT = int(os.getenv("API_PORT", "9025"))
 API_WORKERS = int(os.getenv("API_WORKERS", "2"))
 
 # LLM settings

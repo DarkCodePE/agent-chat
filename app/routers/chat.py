@@ -51,7 +51,7 @@ async def chat_message(request: ChatRequest) -> Dict[str, Any]:
     """
     try:
         logger.info(f"Processing chat message for thread: {request.thread_id}")
-        result = await process_message(
+        result = process_message(
             message=request.message,
             thread_id=request.thread_id,
             reset_thread=request.reset_thread

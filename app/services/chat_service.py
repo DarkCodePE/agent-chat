@@ -1,15 +1,15 @@
 import logging
 from typing import Dict, Any, List, Optional
-
+import traceback
 from langchain_core.messages import HumanMessage, AIMessage
 
-from app.database.postgres import get_postgres_saver
+from app.database.postgres import get_postgres_saver, get_async_postgres_saver
 from app.graph.chat_graph import create_chat_graph
 
 logger = logging.getLogger(__name__)
 
 
-async def process_message(
+def process_message(
         message: str,
         thread_id: str,
         reset_thread: bool = False
@@ -27,18 +27,20 @@ async def process_message(
     """
     try:
         # Create the chat graph
+        logger.info(f"Creating chat graph for thread {thread_id}")
         graph = create_chat_graph()
+        logger.info(f"Chat graph created successfully for thread {thread_id}")
 
         # Set up configuration with the thread_id
-        # This is what allows persistence across messages
         config = {
             "configurable": {
                 "thread_id": thread_id,
+                "reset_thread": reset_thread
             }
         }
+        logger.info(f"Configuration set for thread {thread_id}: {config}")
 
         # Prepare the initial state
-        # The actual state may be loaded from the database if it exists
         initial_state = {
             "input": message,
             "chat_history": [],
@@ -46,23 +48,38 @@ async def process_message(
             "answer": "",
             "documents": [],
             "web_search": "No",
+            "summary": ""  # Make sure all expected state fields are initialized
         }
+        logger.info(f"Initial state prepared for thread {thread_id}")
 
-        # Invoke the graph with the initial state and configuration
         # Use ainvoke instead of invoke since retrieve_context is async
-        logger.info(f"Processing message in thread {thread_id}")
-        result = await graph.ainvoke(initial_state, config)
-        logger.info(f"Final state: {result}")
+        logger.info(f"Invoking graph for thread {thread_id}")
+        try:
+            result = graph.invoke(initial_state, config)
+            logger.info(f"Graph execution completed for thread {thread_id}")
+        except Exception as graph_error:
+            logger.error(f"Error during graph execution: {str(graph_error)}")
+            logger.error(f"Graph execution traceback: {traceback.format_exc()}")
+            raise graph_error
+
+        logger.info(f"Final state keys: {result.keys()}")
         return {
             "thread_id": thread_id,
             "message": message,
-            "answer": result["answer"],
+            "answer": result.get("answer", "I encountered an error generating a response.")
         }
 
     except Exception as e:
-        print(f"Error processing message: {str(e)}")
-        logger.error(f"Error processing message: {str(e)}")
-        raise e
+        error_detail = str(e) if str(e) else "Unknown error (empty exception message)"
+        stack_trace = traceback.format_exc()
+        logger.error(f"Error processing message: {error_detail}")
+        logger.error(f"Stack trace: {stack_trace}")
+        return {
+            "thread_id": thread_id,
+            "message": message,
+            "answer": f"I'm sorry, I encountered an error. Technical details: {error_detail}",
+            "error": error_detail
+        }
 
 
 async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
@@ -76,17 +93,29 @@ async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
         List of message objects with role and content
     """
     try:
-        # Get the checkpointer directly instead of creating a new graph
-        checkpointer = get_postgres_saver()
+        # Create the chat graph to access its API
+        logger.info(f"Creating chat graph for thread {thread_id}")
+        graph = await create_chat_graph()
 
-        # Create a configuration to retrieve the state
+        # Create a configuration for the thread
         config = {"configurable": {"thread_id": thread_id}}
 
-        # Get the state
-        state = checkpointer.get(config)
+        # Check if the graph has state for this thread
+        if not graph.exists(config):
+            logger.info(f"No state exists for thread {thread_id}")
+            return []
 
-        # Extract chat history from the channel_values
-        chat_history = state.get("channel_values", {}).get("chat_history", [])
+        # Use graph.get_state() to retrieve the state properly
+        try:
+            state_snapshot = graph.get_state(config)
+            logger.info(f"Retrieved state snapshot for thread {thread_id}")
+        except Exception as e:
+            logger.error(f"Error retrieving state from graph: {str(e)}")
+            logger.error(traceback.format_exc())
+            return []
+
+        # Extract chat history from the values
+        chat_history = state_snapshot.values.get("chat_history", [])
 
         if not chat_history:
             logger.info(f"Empty chat history for thread {thread_id}")
@@ -128,5 +157,7 @@ async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
         return formatted_history
 
     except Exception as e:
+        stack_trace = traceback.format_exc()
         logger.error(f"Error retrieving chat history: {str(e)}")
+        logger.error(f"Stack trace: {stack_trace}")
         return []

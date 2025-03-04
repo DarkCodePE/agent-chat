@@ -189,7 +189,7 @@ class DocumentService:
 
         return file
 
-    async def search_documents(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def search_documents(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
         Search for documents in Qdrant that are relevant to the query.
 
@@ -202,7 +202,7 @@ class DocumentService:
         """
         try:
             # Create query embedding
-            query_vector = await self.embeddings.aembed_query(query)
+            query_vector = self.embeddings.embed_query(query)
 
             # Search in Qdrant
             search_results = self.qdrant_client.search(

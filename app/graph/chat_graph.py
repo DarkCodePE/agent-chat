@@ -1,5 +1,5 @@
 import logging
-
+import platform
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import StateGraph, START, END, MessagesState
@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.graph.state import State
 from app.graph.nodes import retrieve_context, generate_response, summarize_conversation
-from app.database.postgres import get_postgres_saver, get_postgres_store
+from app.database.postgres import get_postgres_saver, get_postgres_store, get_async_postgres_saver
 import os
 from dotenv import load_dotenv
 from typing import Optional
@@ -19,6 +19,7 @@ from typing import Optional
 # Load environment variables
 load_dotenv()
 logger = logging.getLogger(__name__)
+
 
 def should_summarize(state: State) -> str:
     """Decide si resumir o continuar."""
@@ -48,11 +49,15 @@ def create_chat_graph():
         workflow.add_edge("generate_response", END)
 
         # Get the PostgreSQL saver for persistence
-        checkpointer = get_postgres_saver()
-
+        # if platform.system() == "Windows":
+        #     # Use synchronous saver on Windows
+        #     checkpointer = get_async_postgres_saver()
+        # else:
+        #     # Use async saver on other platforms
+        #     checkpointer = await get_async_postgres_saver()
         # Get the PostgreSQL store for cross-thread state
         store = get_postgres_store()
-        #checkpointer = MemorySaver()
+        checkpointer = get_postgres_saver()
         # Compile the graph with the checkpointer
         compiled_graph = workflow.compile(checkpointer=checkpointer, store=store)
 

@@ -32,7 +32,7 @@ def get_document_service() -> DocumentService:
     return _document_service
 
 
-async def retrieve_context(state: State) -> State:
+def retrieve_context(state: State) -> State:
     """
     Retrieve relevant context based on the user's input.
 
@@ -51,7 +51,7 @@ async def retrieve_context(state: State) -> State:
     document_service = get_document_service()
 
     # Search for relevant documents
-    search_results = await document_service.search_documents(query_text, limit=5)
+    search_results = document_service.search_documents(query_text, limit=5)
 
     # Convert to LangChain Document objects
     documents = []
