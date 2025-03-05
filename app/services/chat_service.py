@@ -95,7 +95,7 @@ async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
     try:
         # Create the chat graph to access its API
         logger.info(f"Creating chat graph for thread {thread_id}")
-        graph = await create_chat_graph()
+        graph = create_chat_graph()
 
         # Create a configuration for the thread
         config = {"configurable": {"thread_id": thread_id}}
