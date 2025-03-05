@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def should_summarize(state: State) -> str:
     """Decide si resumir o continuar."""
-    return "summarize_conversation" if len(state["chat_history"]) > 6 else "generate_response"
+    return "summarize_conversation" if len(state["messages"]) > 6 else "generate_response"
 
 
 def create_chat_graph():

@@ -43,7 +43,7 @@ def process_message(
         # Prepare the initial state
         initial_state = {
             "input": message,
-            "chat_history": [],
+            "messages": [],
             "context": "",
             "answer": "",
             "documents": [],
@@ -115,7 +115,7 @@ async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
             return []
 
         # Extract chat history from the values
-        chat_history = state_snapshot.values.get("chat_history", [])
+        chat_history = state_snapshot.values.get("messages", [])
 
         if not chat_history:
             logger.info(f"Empty chat history for thread {thread_id}")

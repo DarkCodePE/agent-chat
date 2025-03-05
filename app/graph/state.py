@@ -9,7 +9,7 @@ from langgraph.graph import add_messages
 
 class State(TypedDict):
     input: str
-    chat_history: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[List[BaseMessage], add_messages]
     context: str
     answer: str
     documents: Optional[List[Document]]  # For storing retrieved documents
