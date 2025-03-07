@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_qdrant import Qdrant
 from qdrant_client import QdrantClient
 
-from app.graph.state import State, AmbiguityClassification
+from app.graph.state import State, AmbiguityClassification, VehicleInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 from app.services.document_service import DocumentService
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT
@@ -33,7 +33,73 @@ def get_document_service() -> DocumentService:
     return _document_service
 
 
-async def classify_ambiguity(state: State) -> State:
+# Nodo para capturar información importante
+def capture_important_info(state: State) -> State:
+    """
+    Analiza la conversación para extraer y almacenar información importante
+    sobre el vehículo y las necesidades del usuario.
+    """
+    llm = ChatOpenAI(model=LLM_MODEL)
+
+    # Obtenemos los mensajes recientes para analizar
+    messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+
+    # Convertimos los mensajes en un formato legible para el LLM
+    conversation_history = ""
+    for msg in messages:
+        role = "Usuario" if msg.type == "human" else "Asistente"
+        conversation_history += f"{role}: {msg.content}\n"
+
+    # Prompt para extraer la información clave
+    system_prompt = f"""
+    Eres un asistente experto en analizar conversaciones para extraer información importante.
+
+    A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
+
+    Tu tarea es extraer los siguientes detalles si están presentes:
+    - Tipo de vehículo (Ejemplo: "taxi", "particular", "transporte de mercancías")
+    - Ubicación de la planta (Ejemplo: "sjl", "trapiche", "carabayllo")
+    - Tipo de servicio (Ejemplo: "primera vez", "renovación")
+    - Categoría tarifaria (Ejemplo: "M1", "N1")
+
+    Si algún dato no está disponible en la conversación, devuelve null para ese campo.
+
+    Conversación:
+    {conversation_history}
+
+    Importante: 
+    1. No inventes información que no esté explícitamente mencionada en la conversación
+    2. Presta especial atención a las respuestas del usuario
+    """
+
+    # Configuramos el LLM para obtener salida estructurada
+    structured_llm = llm.with_structured_output(VehicleInfo)
+
+    # Invocamos el modelo
+    result = structured_llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content="Extrae la información vehicular de esta conversación")
+    ])
+
+    # Recuperamos información ya existente para no perderla
+    current_info = state.get("vehicle_info", {})
+
+    # Actualizamos solo los campos que tienen información nueva
+    updated_info = {}
+    for key, value in result.items():
+        if value is not None:  # Solo actualizamos si hay un valor nuevo
+            updated_info[key] = value
+        elif key in current_info:  # Mantenemos valores anteriores
+            updated_info[key] = current_info[key]
+
+    # Registramos la información encontrada
+    logger.info(f"Información vehicular extraída: {updated_info}")
+
+    # Actualizamos el estado con la información extraída
+    return {"vehicle_info": updated_info}
+
+
+def classify_ambiguity(state: State) -> State:
     """
     Determina si la consulta del usuario es ambigua y requiere clarificación.
     """
@@ -42,6 +108,18 @@ async def classify_ambiguity(state: State) -> State:
     user_query = state["input"]
     context = state["context"]
 
+    # Preparar historial de conversación en formato legible
+    conversation_history = ""
+    if "messages" in state and state["messages"]:
+        messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+        for msg in messages:
+            role = "Usuario" if msg.type == "human" else "Asistente"
+            conversation_history += f"{role}: {msg.content}\n"
+
+    # Si hay un resumen, incluirlo también
+    if "summary" in state and state["summary"]:
+        conversation_history = f"Resumen previo: {state['summary']}\n\n" + conversation_history
+
     # Configurar el modelo para salida estructurada
     structured_llm = llm.with_structured_output(AmbiguityClassification)
 
@@ -49,32 +127,34 @@ async def classify_ambiguity(state: State) -> State:
     system_instructions = AMBIGUITY_CLASSIFIER_PROMPT.format(
         user_query=user_query,
         retrieved_context=context,
+        conversation_history=conversation_history
     )
 
     # Invocar el modelo
-    result = await structured_llm.ainvoke([
+    result = structured_llm.invoke([
         SystemMessage(content=system_instructions),
         HumanMessage(content="Analiza esta consulta sobre revisiones técnicas vehiculares")
     ])
 
     # Actualizar el estado con los resultados
-    state["ambiguity_classification"]["is_ambiguous"] = result.is_ambiguous
-    state["ambiguity_classification"]["ambiguity_category"] = result.ambiguity_category
-    state["ambiguity_classification"]["clarification_question"] = result.clarification_question
+    state["ambiguity_classification"] = result
+    logger.info("ambiguity_classification: ", result)
 
-    # Registrar para análisis y debugging
-    logger.info(f"Clasificación de ambigüedad: {result.is_ambiguous}, Categoría: {result.ambiguity_category}")
-    logger.info("Pregunta de clarificación: " + result.clarification_question)
+
     return state
 
-async def ask_clarification(state: State) -> State:
-    """
-   Genera una respuesta solicitando clarificación al usuario.
-   """
+
+def ask_clarification(state: State) -> State:
+    """Genera una pregunta de clarificación al usuario."""
+    # Obtener la información de ambigüedad
     clarification_question = state["ambiguity_classification"]["clarification_question"]
 
-    # Agregar la pregunta de clarificación al historial
-    state["answer"] = clarification_question
+    # Construir respuesta amigable
+    mensaje = f"Para ayudarte mejor, necesito más información. {clarification_question}"
+
+    # Actualizar estado
+    state["answer"] = mensaje
+    state["messages"].append(AIMessage(content=mensaje))
 
     return state
 
@@ -148,41 +228,35 @@ def generate_response(state: State) -> Dict[str, Any]:
         llm = ChatOpenAI(model=LLM_MODEL)
         context = state["context"]
         summary = state["summary"]
-        # Definir si se debe generar una respuesta o una pregunta de clarificación
-        is_ambiguous = state["ambiguity_classification"]["is_ambiguous"]
-        clarification_question = state["ambiguity_classification"]["clarification_question"]
-        # Si la consulta es ambigua, generamos una pregunta de clarificación
-        if is_ambiguous and clarification_question:
-            response_text = clarification_question
-        else:
-            # Construir el mensaje del sistema con el contexto y resumen
-            system_message = ASSISTANT_PROMPT.format(
-                context=context,
-                chat_history=summary
-            )
 
-            # Limitar la cantidad de mensajes en el historial
-            recent_messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+        # Construir el mensaje del sistema con el contexto y resumen
+        system_message = ASSISTANT_PROMPT.format(
+            context=context,
+            chat_history=summary
+        )
 
-            # Construir el prompt con historial y nuevo input
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_message),
-                MessagesPlaceholder(variable_name="messages"),
-                ("human", "{input}")
-            ])
+        # Limitar la cantidad de mensajes en el historial
+        recent_messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
-            # Ejecutar la cadena del modelo
-            chain = prompt | llm | StrOutputParser()
-            response_text = chain.invoke({
-                "messages": recent_messages,
-                "input": state["input"]
-            })
+        # Construir el prompt con historial y nuevo input
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_message),
+            MessagesPlaceholder(variable_name="messages"),
+            ("human", "{input}")
+        ])
+
+        # Ejecutar la cadena del modelo
+        chain = prompt | llm | StrOutputParser()
+        response = chain.invoke({
+            "messages": recent_messages,
+            "input": state["input"]
+        })
 
         # Guardar la respuesta y actualizar el historial de chat
-        state["answer"] = response_text
+        state["answer"] = response
         state["messages"] += [
             HumanMessage(content=state["input"]),
-            AIMessage(content=response_text)
+            AIMessage(content=response)
         ]
 
         logger.info(f"Generated response for input: {state['input'][:50]}...")

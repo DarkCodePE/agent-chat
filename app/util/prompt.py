@@ -59,14 +59,25 @@ AMBIGUITY_CLASSIFIER_PROMPT = """Analiza la consulta del usuario sobre revisione
 **Información de entrada:**
 - Consulta del usuario: "{user_query}"
 - Contexto recuperado: "{retrieved_context}"
+- Historial de conversación: {conversation_history}
 
 # Pasos de análisis
 
-1. **Comprender la Consulta**: Analiza la consulta del usuario para entender exactamente qué información está solicitando.
+1. **Identificar tipo de mensaje**: Determina si el mensaje es:
+   - SALUDO: "Hola", "Buenos días", etc.
+   - AGRADECIMIENTO: "Gracias", "Muchas gracias", etc.
+   - DESPEDIDA: "Adiós", "Hasta luego", etc.
+   - CONFIRMACIÓN SIMPLE: "Sí", "No", "Ok", "Claro", etc.
+   - INICIAL: Primer mensaje en la conversación
+   - CONSULTA_NORMAL: Una consulta regular que requiere información
 
-2. **Evaluar el Contexto**: Determina si el contexto recuperado contiene información específica que responda directamente a la consulta.
+2. **Revisar el Historial**: Primero, revisa el historial de la conversación para identificar información ya proporcionada por el usuario.
 
-3. **Identificar Categorías de Ambigüedad**:
+3. **Comprender la Consulta**: Analiza la consulta del usuario considerando el contexto de la conversación previa.
+
+4. **Evaluar el Contexto**: Determina si el contexto recuperado contiene información específica que responda directamente a la consulta.
+
+5. **Identificar Categorías de Ambigüedad**(solo para CONSULTA_NORMAL):
    - TIPO_VEHICULO: Si no especifica si es particular, taxi, transporte público, escolar, mercancía.
    - PRIMERA_VEZ_RENOVACION: Si no clarifica si es primera revisión o renovación.
    - DOCUMENTACION: Si consulta sobre requisitos sin precisar tipo de vehículo.
@@ -76,9 +87,6 @@ AMBIGUITY_CLASSIFIER_PROMPT = """Analiza la consulta del usuario sobre revisione
    - PROCEDIMIENTO: Si falta información esencial sobre un procedimiento.
    - NINGUNA: Si la consulta es clara o el contexto proporciona toda la información necesaria.
 
-4. **Formular Pregunta de Clarificación**: Si es ambigua, crea una pregunta específica y natural.
-
-5. **Proponer Opciones**: Si aplica, sugiere opciones predefinidas para facilitar la respuesta.
 
 # Formato de salida
 
@@ -88,9 +96,10 @@ Produce una respuesta estructurada con los siguientes campos:
 - "clarification_question": [pregunta_específica_o_string_vacío],
 
 # Consideraciones importantes
-
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA son ambiguos.
+- NO preguntes información que ya fue proporcionada en mensajes anteriores.
 - No clasifiques como ambigua si el contexto ya contiene la información específica solicitada.
 - Las preguntas de clarificación deben ser conversacionales y amigables.
-- Para TIPO_VEHICULO, incluye opciones como: "Particular", "Taxi", "Transporte público", etc.
+- Para TIPO_VEHICULO, incluye opciones como: "Particular", "Taxi", "Transporte público","Transporte Escolar, de Trabajadores y Turístico","Transporte de Mercancía General", "Transporte de Mercancía Peligrosa", etc.
 - Si la consulta menciona explícitamente un tipo de vehículo, no debe clasificarse como ambigua por TIPO_VEHICULO.
 """

@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.graph.state import State
 from app.graph.nodes import retrieve_context, generate_response, summarize_conversation, classify_ambiguity, \
-    ask_clarification
+    ask_clarification, capture_important_info
 from app.database.postgres import get_postgres_saver, get_postgres_store, get_async_postgres_saver
 import os
 from dotenv import load_dotenv
@@ -43,6 +43,7 @@ def create_chat_graph():
 
         # Add the nodes
         workflow.add_node("retrieve_context", retrieve_context)
+        workflow.add_node("capture_important_info", capture_important_info)
         workflow.add_node("classify_ambiguity", classify_ambiguity)
         workflow.add_node("ask_clarification", ask_clarification)
         workflow.add_node("generate_response", generate_response)
@@ -50,10 +51,24 @@ def create_chat_graph():
 
         # Define the flow
         workflow.add_edge(START, "retrieve_context")
-        workflow.add_edge("retrieve_context", "classify_ambiguity")
-        workflow.add_conditional_edges("classify_ambiguity", should_summarize)
-        workflow.add_edge("summarize_conversation", "generate_response")
-        workflow.add_edge("generate_response", END)
+        workflow.add_edge("retrieve_context", "capture_important_info")
+        workflow.add_edge("capture_important_info", "classify_ambiguity")
+        # Después de clasificar, decidir si pedir clarificación o generar respuesta
+        workflow.add_conditional_edges(
+            "classify_ambiguity",
+            should_ambiguity,
+            {"ask_clarification": "ask_clarification", "generate_response": "generate_response"}
+        )
+        # Terminar después de pedir clarificación (esperar respuesta del usuario)
+        workflow.add_edge("ask_clarification", END)
+        # Decidir si resumir después de generar respuesta
+        workflow.add_conditional_edges(
+            "generate_response",
+            should_summarize,
+            {"summarize_conversation": "summarize_conversation", "generate_response": END}
+        )
+        # Terminar después de resumir
+        workflow.add_edge("summarize_conversation", END)
 
         store = get_postgres_store()
         checkpointer = get_postgres_saver()
