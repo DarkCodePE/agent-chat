@@ -3,17 +3,17 @@ from typing import Dict, Any
 
 from dotenv import load_dotenv
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
+from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_qdrant import Qdrant
 from qdrant_client import QdrantClient
 
-from app.graph.state import State
+from app.graph.state import State, AmbiguityClassification
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 from app.services.document_service import DocumentService
-from app.util.prompt import ASSISTANT_PROMPT
+from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,51 @@ def get_document_service() -> DocumentService:
             raise
     return _document_service
 
+
+async def classify_ambiguity(state: State) -> State:
+    """
+    Determina si la consulta del usuario es ambigua y requiere clarificación.
+    """
+    llm = ChatOpenAI(model=LLM_MODEL)
+
+    user_query = state["input"]
+    context = state["context"]
+
+    # Configurar el modelo para salida estructurada
+    structured_llm = llm.with_structured_output(AmbiguityClassification)
+
+    # Preparar el prompt con los datos actuales
+    system_instructions = AMBIGUITY_CLASSIFIER_PROMPT.format(
+        user_query=user_query,
+        retrieved_context=context,
+    )
+
+    # Invocar el modelo
+    result = await structured_llm.ainvoke([
+        SystemMessage(content=system_instructions),
+        HumanMessage(content="Analiza esta consulta sobre revisiones técnicas vehiculares")
+    ])
+
+    # Actualizar el estado con los resultados
+    state["ambiguity_classification"]["is_ambiguous"] = result.is_ambiguous
+    state["ambiguity_classification"]["ambiguity_category"] = result.ambiguity_category
+    state["ambiguity_classification"]["clarification_question"] = result.clarification_question
+
+    # Registrar para análisis y debugging
+    logger.info(f"Clasificación de ambigüedad: {result.is_ambiguous}, Categoría: {result.ambiguity_category}")
+    logger.info("Pregunta de clarificación: " + result.clarification_question)
+    return state
+
+async def ask_clarification(state: State) -> State:
+    """
+   Genera una respuesta solicitando clarificación al usuario.
+   """
+    clarification_question = state["ambiguity_classification"]["clarification_question"]
+
+    # Agregar la pregunta de clarificación al historial
+    state["answer"] = clarification_question
+
+    return state
 
 def retrieve_context(state: State) -> State:
     """
@@ -103,52 +148,41 @@ def generate_response(state: State) -> Dict[str, Any]:
         llm = ChatOpenAI(model=LLM_MODEL)
         context = state["context"]
         summary = state["summary"]
-        # Construir el mensaje del sistema con el contexto y resumen
-        system_message = ASSISTANT_PROMPT.format(
-            context=context,
-            chat_history=summary
-        )
+        # Definir si se debe generar una respuesta o una pregunta de clarificación
+        is_ambiguous = state["ambiguity_classification"]["is_ambiguous"]
+        clarification_question = state["ambiguity_classification"]["clarification_question"]
+        # Si la consulta es ambigua, generamos una pregunta de clarificación
+        if is_ambiguous and clarification_question:
+            response_text = clarification_question
+        else:
+            # Construir el mensaje del sistema con el contexto y resumen
+            system_message = ASSISTANT_PROMPT.format(
+                context=context,
+                chat_history=summary
+            )
 
-        # # Construir el mensaje del sistema con el contexto y resumen
-        # system_message = "You are a helpful, friendly assistant."
-        #
-        # # Agregar el contexto de documentos si existe
-        # context = state.get("context", "")
-        # if context:
-        #     system_message += f"\n\nUse the following context to help answer the question:\n{context}\n"
-        # elif state.get("documents") and state["documents"]:
-        #     document_context = "\n\n".join([doc.page_content for doc in state["documents"]])
-        #     system_message += f"\n\nUse the following context to help answer the question:\n{document_context}\n"
-        #
-        # # Agregar resumen si existe
-        # summary = state.get("summary", "")
-        # if summary:
-        #     system_message += f"\n\nSummary of the conversation so far: {summary}\n"
-        #
-        # system_message += "\nBe concise and clear in your responses. If the context doesn't contain relevant information to answer the question, say so and answer based on your knowledge."
+            # Limitar la cantidad de mensajes en el historial
+            recent_messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
-        # Limitar la cantidad de mensajes en el historial
-        recent_messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+            # Construir el prompt con historial y nuevo input
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_message),
+                MessagesPlaceholder(variable_name="messages"),
+                ("human", "{input}")
+            ])
 
-        # Construir el prompt con historial y nuevo input
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_message),
-            MessagesPlaceholder(variable_name="messages"),
-            ("human", "{input}")
-        ])
-
-        # Ejecutar la cadena del modelo
-        chain = prompt | llm | StrOutputParser()
-        response = chain.invoke({
-            "messages": recent_messages,
-            "input": state["input"]
-        })
+            # Ejecutar la cadena del modelo
+            chain = prompt | llm | StrOutputParser()
+            response_text = chain.invoke({
+                "messages": recent_messages,
+                "input": state["input"]
+            })
 
         # Guardar la respuesta y actualizar el historial de chat
-        state["answer"] = response
+        state["answer"] = response_text
         state["messages"] += [
             HumanMessage(content=state["input"]),
-            AIMessage(content=response)
+            AIMessage(content=response_text)
         ]
 
         logger.info(f"Generated response for input: {state['input'][:50]}...")
