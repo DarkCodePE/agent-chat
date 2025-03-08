@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient
 from app.graph.state import State, AmbiguityClassification, VehicleInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 from app.services.document_service import DocumentService
-from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT
+from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +43,10 @@ def capture_important_info(state: State) -> State:
 
     # Obtenemos los mensajes recientes para analizar
     messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
-
-    # Convertimos los mensajes en un formato legible para el LLM
-    conversation_history = ""
-    for msg in messages:
-        role = "Usuario" if msg.type == "human" else "Asistente"
-        conversation_history += f"{role}: {msg.content}\n"
-
+    logger.info(f"messages: {messages}")
+    question = state["input"]
     # Prompt para extraer la información clave
-    system_prompt = f"""
+    system_prompt = f"""Q
     Eres un asistente experto en analizar conversaciones para extraer información importante.
 
     A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
@@ -63,9 +58,11 @@ def capture_important_info(state: State) -> State:
     - Categoría tarifaria (Ejemplo: "M1", "N1")
 
     Si algún dato no está disponible en la conversación, devuelve null para ese campo.
-
+    
+    pregunta: 
+    {question}
     Conversación:
-    {conversation_history}
+    {messages}
 
     Importante: 
     1. No inventes información que no esté explícitamente mencionada en la conversación
@@ -81,22 +78,10 @@ def capture_important_info(state: State) -> State:
         HumanMessage(content="Extrae la información vehicular de esta conversación")
     ])
 
-    # Recuperamos información ya existente para no perderla
-    current_info = state.get("vehicle_info", {})
-
-    # Actualizamos solo los campos que tienen información nueva
-    updated_info = {}
-    for key, value in result.items():
-        if value is not None:  # Solo actualizamos si hay un valor nuevo
-            updated_info[key] = value
-        elif key in current_info:  # Mantenemos valores anteriores
-            updated_info[key] = current_info[key]
-
-    # Registramos la información encontrada
-    logger.info(f"Información vehicular extraída: {updated_info}")
-
+    state["vehicle_info"] = result
+    logger.info("vehicle_info: ", result)
     # Actualizamos el estado con la información extraída
-    return {"vehicle_info": updated_info}
+    return state
 
 
 def classify_ambiguity(state: State) -> State:
@@ -109,25 +94,22 @@ def classify_ambiguity(state: State) -> State:
     context = state["context"]
 
     # Preparar historial de conversación en formato legible
-    conversation_history = ""
-    if "messages" in state and state["messages"]:
-        messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
-        for msg in messages:
-            role = "Usuario" if msg.type == "human" else "Asistente"
-            conversation_history += f"{role}: {msg.content}\n"
+    conversation_history = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
     # Si hay un resumen, incluirlo también
-    if "summary" in state and state["summary"]:
-        conversation_history = f"Resumen previo: {state['summary']}\n\n" + conversation_history
+    summary = state["summary"]
+    vehicle_info = state["vehicle_info"]
 
     # Configurar el modelo para salida estructurada
     structured_llm = llm.with_structured_output(AmbiguityClassification)
 
     # Preparar el prompt con los datos actuales
-    system_instructions = AMBIGUITY_CLASSIFIER_PROMPT.format(
+    system_instructions = AMBIGUITY_CLASSIFIER_PROMPT_v2.format(
         user_query=user_query,
         retrieved_context=context,
-        conversation_history=conversation_history
+        conversation_history=conversation_history,
+        summary=summary,
+        vehicle_info=vehicle_info
     )
 
     # Invocar el modelo

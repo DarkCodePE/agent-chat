@@ -60,6 +60,8 @@ AMBIGUITY_CLASSIFIER_PROMPT = """Analiza la consulta del usuario sobre revisione
 - Consulta del usuario: "{user_query}"
 - Contexto recuperado: "{retrieved_context}"
 - Historial de conversación: {conversation_history}
+- Resumen de la conversación: {summary}
+- Información del usuario: {vehicle_info}
 
 # Pasos de análisis
 
@@ -100,6 +102,41 @@ Produce una respuesta estructurada con los siguientes campos:
 - NO preguntes información que ya fue proporcionada en mensajes anteriores.
 - No clasifiques como ambigua si el contexto ya contiene la información específica solicitada.
 - Las preguntas de clarificación deben ser conversacionales y amigables.
-- Para TIPO_VEHICULO, incluye opciones como: "Particular", "Taxi", "Transporte público","Transporte Escolar, de Trabajadores y Turístico","Transporte de Mercancía General", "Transporte de Mercancía Peligrosa", etc.
-- Si la consulta menciona explícitamente un tipo de vehículo, no debe clasificarse como ambigua por TIPO_VEHICULO.
+
+# Consideraciones especiales para requisitos, tarifas y procedimientos
+- Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre la planta de revisión y ya conocemos su ubicación, la consulta NO es ambigua !!!.
+"""
+
+
+AMBIGUITY_CLASSIFIER_PROMPT_v2 = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
+
+**Información de entrada:**
+- Consulta del usuario: "{user_query}"
+- Contexto recuperado: "{retrieved_context}"
+- Historial de conversación: {conversation_history}
+- Resumen de la conversación: {summary}
+- Información del usuario: {vehicle_info}
+
+# Pasos de análisis
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA son ambiguos.
+- NO preguntes información que ya fue proporcionada en mensajes anteriores.
+- No clasifiques como ambigua si el contexto ya contiene la información específica solicitada.
+- Las preguntas de clarificación deben ser conversacionales y amigables.
+
+# Consideraciones especiales para requisitos, tarifas y procedimientos
+- Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
+- Si el usuario pregunta sobre la planta de revisión y ya conocemos su ubicación, la consulta NO es ambigua !!!.
+
+# Formato de salida
+
+Produce una respuesta estructurada con los siguientes campos:
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],
+
 """
