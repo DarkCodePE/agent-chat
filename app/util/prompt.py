@@ -120,11 +120,19 @@ AMBIGUITY_CLASSIFIER_PROMPT_v2 = """Analiza la consulta del usuario sobre revisi
 - Resumen de la conversación: {summary}
 - Información del usuario: {vehicle_info}
 
+ Pasos de análisis
+
+1. **Revisar el Historial**: Primero, revisa la consulta del usuario: {user_query} y luego el historial de la conversación: {conversation_history} para identificar información ya proporcionada por el usuario.
+
+2. **Comprender la Consulta**: Analiza la consulta del usuario considerando el contexto de la conversación previa {summary}.
+
+3. **Evaluar el Contexto**: Determina si el contexto recuperado contiene información específica que responda directamente a la consulta {vehicle_info}.
+
 # Pasos de análisis
-- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA son ambiguos.
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA SON ambiguos.
 - NO preguntes información que ya fue proporcionada en mensajes anteriores.
 - No clasifiques como ambigua si el contexto ya contiene la información específica solicitada.
-- Las preguntas de clarificación deben ser conversacionales y amigables.
+- Las preguntas de clarificación deben ser conversacionales, amigables y de acuerdo al contexto de la conversacion.
 
 # Consideraciones especiales para requisitos, tarifas y procedimientos
 - Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
@@ -138,5 +146,4 @@ Produce una respuesta estructurada con los siguientes campos:
 - "is_ambiguous": [true/false],
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío],
-
 """

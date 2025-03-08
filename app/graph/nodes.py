@@ -46,7 +46,7 @@ def capture_important_info(state: State) -> State:
     logger.info(f"messages: {messages}")
     question = state["input"]
     # Prompt para extraer la información clave
-    system_prompt = f"""Q
+    system_prompt = f"""
     Eres un asistente experto en analizar conversaciones para extraer información importante.
 
     A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
