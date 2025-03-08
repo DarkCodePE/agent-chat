@@ -146,5 +146,36 @@ AMBIGUITY_CLASSIFIER_PROMPT_v2 = """Analiza la consulta del usuario sobre revisi
 Produce una respuesta estructurada con los siguientes campos:
 - "is_ambiguous": [true/false],
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],eee
+"""
+
+AMBIGUITY_CLASSIFIER_PROMPT_v3 = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación.
+
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Información del vehículo: {vehicle_info}
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+
+# Pasos de análisis
+
+1. **Revisar las preguntas previas**: Analiza las preguntas ya realizadas: {previous_questions} para entender en qué parte de la conversación nos encontramos y NO repetir preguntas.
+
+2. **Cruzar información capturada con preguntas previas**: Revisa {vehicle_info} junto con {previous_questions} para entender qué información ya se ha obtenido. Determina si la consulta sigue siendo ambigua con estos datos.
+
+3. **Evitar repeticiones**: Si ya has preguntado por una categoría específica (visible en {previous_categories}), NO vuelvas a preguntar sobre la misma categoría aunque falte esa información.
+
+4. **Formular preguntas basadas en documentos**: Si determinas que la consulta es ambigua, formula la pregunta de clarificación utilizando exclusivamente la información encontrada en el contexto recuperado: {retrieved_context}. Esto asegura que las preguntas sean relevantes y precisas según la documentación oficial disponible.
+
+# Consideraciones importantes
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA son ambiguos.
+- NUNCA preguntes información que ya fue proporcionada en mensajes anteriores.
+- NUNCA repitas una pregunta que ya hayas hecho previamente, incluso si la respuesta no fue clara.
+- Si ya has preguntado sobre una categoría específica y el usuario ha respondido, considera esa categoría aclarada.
+- Si el usuario cambia de vehículo completamente, puedes hacer nuevas preguntas sobre ese vehículo específico.
+
+# Formato de salida
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío],
 """

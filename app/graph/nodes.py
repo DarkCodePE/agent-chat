@@ -123,15 +123,19 @@ def ask_clarification(state: State) -> dict:
     """Genera una pregunta de clarificación al usuario."""
     # Obtener la información de ambigüedad
     clarification_question = state["ambiguity_classification"]["clarification_question"]
-
+    ambiguity_category = state["ambiguity_classification"]["ambiguity_category"]
+    print("clarification_question: ", clarification_question)
+    print("ambiguity_category: ", ambiguity_category)
     # Construir respuesta amigable
     mensaje = f"Para ayudarte mejor, necesito más información. {clarification_question}"
+    #messages = state["messages"] + [AIMessage(content=mensaje)]
 
-    # Actualizar estado
-    state["answer"] = mensaje
-    state["messages"].append(AIMessage(content=mensaje))
-
-    return {"answer": mensaje, "messages": state["messages"]}
+    return {
+        "answer": mensaje,
+        "messages": [AIMessage(content=mensaje)],  # AIMessage porque es el asistente quien habla
+        "previous_questions": [clarification_question],  # CORREGIDO: ahora es lista
+        "previous_categories": [ambiguity_category]  # CORREGIDO: ahora es lista
+    }
 
 def retrieve_context(state: State) -> dict:
     """

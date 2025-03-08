@@ -1,5 +1,7 @@
 # Define State structure
 # LangChain imports
+from operator import add
+
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 from langchain_core.documents import Document
 from typing import List, Optional, TypedDict, Annotated
@@ -27,4 +29,5 @@ class State(TypedDict):
     summary: Optional[str]  # For storing the summary of the conversation
     ambiguity_classification: AmbiguityClassification
     vehicle_info: VehicleInfo  # For storing the classification of ambiguity
-
+    previous_questions: Annotated[List[str], add]  # storing previous questions
+    previous_categories: Annotated[List[str], add]  # storing previous categories
