@@ -50,9 +50,11 @@ def create_chat_graph():
         workflow.add_node("summarize_conversation", summarize_conversation)
 
         # Define the flow
+        # Fan-out: START va directamente a ambos nodos en paralelo
         workflow.add_edge(START, "retrieve_context")
-        workflow.add_edge("retrieve_context", "capture_important_info")
-        workflow.add_edge("capture_important_info", "classify_ambiguity")
+        workflow.add_edge(START, "capture_important_info")
+        # Fan-in: Ambos nodos alimentan a classify_ambiguity
+        workflow.add_edge(["retrieve_context", "capture_important_info"], "classify_ambiguity")
         # Después de clasificar, decidir si pedir clarificación o generar respuesta
         workflow.add_conditional_edges(
             "classify_ambiguity",
