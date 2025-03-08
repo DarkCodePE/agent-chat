@@ -135,6 +135,7 @@ AMBIGUITY_CLASSIFIER_PROMPT_v2 = """Analiza la consulta del usuario sobre revisi
 - Las preguntas de clarificación deben ser conversacionales, amigables y de acuerdo al contexto de la conversacion.
 
 # Consideraciones especiales para requisitos, tarifas y procedimientos
+- No vuelvas a hacer las mismas preguntas que ya hiciste {conversation_history}.
 - Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
 - Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
 - Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.

@@ -34,7 +34,7 @@ def get_document_service() -> DocumentService:
 
 
 # Nodo para capturar información importante
-def capture_important_info(state: State) -> State:
+def capture_important_info(state: State) -> dict:
     """
     Analiza la conversación para extraer y almacenar información importante
     sobre el vehículo y las necesidades del usuario.
@@ -78,13 +78,11 @@ def capture_important_info(state: State) -> State:
         HumanMessage(content="Extrae la información vehicular de esta conversación")
     ])
 
-    state["vehicle_info"] = result
-    logger.info("vehicle_info: ", result)
     # Actualizamos el estado con la información extraída
-    return state
+    return {"vehicle_info": result}
 
 
-def classify_ambiguity(state: State) -> State:
+def classify_ambiguity(state: State) -> dict:
     """
     Determina si la consulta del usuario es ambigua y requiere clarificación.
     """
@@ -118,15 +116,10 @@ def classify_ambiguity(state: State) -> State:
         HumanMessage(content="Analiza esta consulta sobre revisiones técnicas vehiculares")
     ])
 
-    # Actualizar el estado con los resultados
-    state["ambiguity_classification"] = result
-    logger.info("ambiguity_classification: ", result)
+    return {"ambiguity_classification": result}
 
 
-    return state
-
-
-def ask_clarification(state: State) -> State:
+def ask_clarification(state: State) -> dict:
     """Genera una pregunta de clarificación al usuario."""
     # Obtener la información de ambigüedad
     clarification_question = state["ambiguity_classification"]["clarification_question"]
@@ -138,9 +131,9 @@ def ask_clarification(state: State) -> State:
     state["answer"] = mensaje
     state["messages"].append(AIMessage(content=mensaje))
 
-    return state
+    return {"answer": mensaje, "messages": state["messages"]}
 
-def retrieve_context(state: State) -> State:
+def retrieve_context(state: State) -> dict:
     """
     Retrieve relevant context based on the user's input.
 
@@ -193,7 +186,7 @@ def retrieve_context(state: State) -> State:
     state["context"] = context
 
     logger.info(f"Retrieved {len(documents)} relevant documents for query: {query_text[:50]}...")
-    return state
+    return {"context": context, "documents": documents}
 
 
 def generate_response(state: State) -> Dict[str, Any]:
