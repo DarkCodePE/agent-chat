@@ -179,3 +179,38 @@ AMBIGUITY_CLASSIFIER_PROMPT_v3 = """Analiza la consulta del usuario sobre revisi
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío],
 """
+
+AMBIGUITY_CLASSIFIER_PROMPT_v4 = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación.
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+- tipo de vehículo: {vehicle_type}
+- ubicación del vehículo: {location}
+- categoría del vehículo: {vehicle_category}
+
+# Pasos de análisis
+
+1. **Revisar las preguntas previas**: Analiza las preguntas ya realizadas: {previous_questions} para entender en qué parte de la conversación nos encontramos y NO repetir preguntas.
+
+2. **Reglas de Ambigüedad**: Determina si la consulta del usuario es ambigua según las siguientes categorías:
+    - Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo : {vehicle_type}, la consulta NO es ambigua !!!.
+    - Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type} y su ubicación: {location}, la consulta NO es ambigua !!!.
+     Si el usuario pregunta sobre las plantas de revisión o horarios de atencion de la planta y si ya se conocemos su ubicación: : {location}, entonces la consulta NO es ambigua !!!.
+    - Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo : {vehicle_type}, la consulta NO es ambigua !!!.
+    - Cualquier otra consulta no considerada en las reglas anteriores, no se considera ambigua.
+
+3. **Evitar repeticiones**: Si ya has preguntado por una categoría específica (visible en {previous_categories}), NO vuelvas a preguntar sobre la misma categoría aunque falte esa información.
+
+4. **Formular preguntas basadas en documentos**: Si determinas que la consulta es ambigua, valida la relacion de la ambiguedad con preguntas previas {previous_questions} y formula la pregunta de clarificación utilizando exclusivamente la información encontrada en el contexto recuperado: {retrieved_context}. Esto asegura que las preguntas sean relevantes y precisas según la documentación oficial disponible, evitando repeticiones.
+
+# Consideraciones importantes
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA son ambiguos.
+- NUNCA preguntes información que ya fue proporcionada en mensajes anteriores.
+- NUNCA repitas una pregunta que ya hayas hecho previamente, incluso si la respuesta no fue clara.
+
+# Formato de salida
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [REQUISITOS/TARIFAS/PLANTAS/PROCEDIMIENTOS/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],
+"""

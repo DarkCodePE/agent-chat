@@ -7,17 +7,28 @@ from langchain_core.documents import Document
 from typing import List, Optional, TypedDict, Annotated
 
 from langgraph.graph import add_messages
+
+
 class AmbiguityClassification(TypedDict):
     is_ambiguous: Optional[bool]  # For tracking whether the user's input is ambiguous
     ambiguity_category: Optional[str]  # For storing the category of ambiguity
     clarification_question: Optional[str]
 
+
 # Primero, ampliamos el State para incluir información vehicular
 class VehicleInfo(TypedDict):
     vehicle_type: Optional[str]  # tipo de vehículo (taxi, particular, etc.)
     plant_location: Optional[str]  # ubicación de la planta
-    service_type: Optional[str]  # tipo de servicio (primera vez, renovación)
-    tariff_type: Optional[str]  # categoría tarifaria
+    location: Optional[str]  # ubicación del vehículo
+    model: Optional[str]  # modelo del vehículo
+    annual: Optional[str]  # año de fabricación del vehículo
+
+
+class PlantInfo(TypedDict):
+    price: Optional[str]  # precio del vehículo
+    location: Optional[str]  # ubicación del vehículo
+    plant_location: Optional[str]  # ubicación de la planta
+
 
 class State(TypedDict):
     input: str

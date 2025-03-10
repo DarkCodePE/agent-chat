@@ -52,10 +52,11 @@ def capture_important_info(state: State) -> dict:
     A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
 
     Tu tarea es extraer los siguientes detalles si están presentes:
-    - Tipo de vehículo (Ejemplo: "taxi", "particular", "transporte de mercancías")
+    - Tipo de vehículo (Ejemplo: "taxi", "particular", "transporte  escolar, "transporte de trabajadores", "transporte turístico", "mercancia general", "mercancia peligrosa")
+    - Direccion de la persona (Ejemplo: "av. los alamos 123", "jr. los claveles 456")
     - Ubicación de la planta (Ejemplo: "sjl", "trapiche", "carabayllo")
-    - Tipo de servicio (Ejemplo: "primera vez", "renovación")
-    - Categoría tarifaria (Ejemplo: "M1", "N1")
+    - Modelo del vehículo (Ejemplo: "toyota yaris", "hyundai accent", "kia rio")
+    - Año de fabricación del vehículo (Ejemplo: "2010", "2015", "2020")
 
     Si algún dato no está disponible en la conversación, devuelve null para ese campo.
     
@@ -90,6 +91,9 @@ def classify_ambiguity(state: State) -> dict:
 
     user_query = state["input"]
     context = state["context"]
+    vehicle_type = state["vehicle_info"]["vehicle_type"]
+    location = state["vehicle_info"]["location"]
+    vehicle_category = state["vehicle_info"]["vehicle_category"]
 
     # Preparar historial de conversación en formato legible
     conversation_history = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
