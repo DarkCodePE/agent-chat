@@ -187,16 +187,18 @@ AMBIGUITY_CLASSIFIER_PROMPT_v4 = """Analiza la consulta del usuario sobre revisi
 - Categorías previas consultadas: {previous_categories}
 - tipo de vehículo: {vehicle_type}
 - ubicación del vehículo: {location}
-- categoría del vehículo: {vehicle_category}
+- ubicación de la planta: {plant_location}
+- modelo del vehículo: {model}
+- año de fabricación del vehículo: {annual}
 
 # Pasos de análisis
 
-1. **Revisar las preguntas previas**: Analiza las preguntas ya realizadas: {previous_questions} para entender en qué parte de la conversación nos encontramos y NO repetir preguntas.
+1. **Revisar las preguntas previas**: Primero, revisa la consulta del usuario: {user_query} y luego analiza las preguntas ya realizadas: {previous_questions} para entender en qué parte de la conversación nos encontramos y NO repetir preguntas.
 
 2. **Reglas de Ambigüedad**: Determina si la consulta del usuario es ambigua según las siguientes categorías:
     - Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo : {vehicle_type}, la consulta NO es ambigua !!!.
     - Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type} y su ubicación: {location}, la consulta NO es ambigua !!!.
-     Si el usuario pregunta sobre las plantas de revisión o horarios de atencion de la planta y si ya se conocemos su ubicación: : {location}, entonces la consulta NO es ambigua !!!.
+    - Si el usuario pregunta sobre las plantas de revisión o horarios de atencion de la planta y si ya se conocemos su ubicación: : {location}, entonces la consulta NO es ambigua !!!.
     - Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo : {vehicle_type}, la consulta NO es ambigua !!!.
     - Cualquier otra consulta no considerada en las reglas anteriores, no se considera ambigua.
 
@@ -213,4 +215,106 @@ AMBIGUITY_CLASSIFIER_PROMPT_v4 = """Analiza la consulta del usuario sobre revisi
 - "is_ambiguous": [true/false],
 - "ambiguity_category": [REQUISITOS/TARIFAS/PLANTAS/PROCEDIMIENTOS/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío],
+"""
+
+AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
+
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+- tipo de vehículo: {vehicle_type}
+- ubicación del vehículo: {location}
+- ubicación de la planta: {plant_location}
+- modelo del vehículo: {model}
+- año de fabricación del vehículo: {annual}
+
+ Pasos de análisis
+
+1. **Comprender la Consulta**: Primero, revisa la consulta del usuario: {user_query} y luego Analiza la consulta del usuario considerando el contexto de la conversación previa {previous_questions}.
+
+2. **Evaluar el Contexto**: Determina si el contexto recuperado contiene información específica que responda directamente a la consulta.
+
+# Pasos de análisis
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA SON ambiguos.
+- NO preguntes información que ya fue proporcionada en mensajes anteriores.
+- No clasifiques como ambigua si el contexto ya contiene la información específica solicitada.
+- Las preguntas de clarificación deben ser conversacionales, amigables y de acuerdo al contexto de la conversacion.
+
+# Consideraciones especiales para requisitos, tarifas y procedimientos
+- Si el usuario pregunta sobre requisitos y no conocemos su tipo de vehículo, la consulta es ambigua, y debemos preguntar por el tipo de vehículo.
+- Si el usuario pregunta sobre requisitos y ya conocemos su tipo de vehículo : {vehicle_type}, la consulta NO es ambigua !!!.
+- Cualquier otra consulta no considerada en las reglas anteriores, no se considera ambigua.
+
+# Formato de salida
+
+Produce una respuesta estructurada con los siguientes campos:
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],eee
+"""
+
+AMBIGUITY_CLASSIFIER_PROMPT_PLANT = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
+
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+- tipo de vehículo: {vehicle_type}
+- ubicación del vehículo: {location}
+- ubicación de la planta: {plant_location}
+- modelo del vehículo: {model}
+- año de fabricación del vehículo: {annual}
+
+ Pasos de análisis
+
+1. **Comprender la Consulta**: Primero, revisa la consulta del usuario: {user_query} y luego Analiza la consulta del usuario considerando el contexto de la conversación previa {previous_questions}.
+
+2. **Evaluar el Contexto**: Determina si el contexto recuperado contiene información específica que responda directamente a la consulta.
+
+# Pasos de análisis
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA SON ambiguos.
+- Si ya conoces el tipo de vehículo, no es necesario preguntar por el tipo de vehículo.
+- Si ya conoces la ubicación del vehículo, no es necesario preguntar por la ubicación del vehículo.
+- Las preguntas de clarificación deben ser conversacionales, amigables y de acuerdo al contexto de la conversacion.
+
+# Consideraciones especiales para tarifas y plantas
+- SI el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type}, y no conocemos su ubicación: {location}, es decir su ubicación es None, la consulta es ambigua, y debemos preguntar por la ubicación.
+- Si el usuario pregunta sobre tarifas y no se conoce su tipo de vehículo : {vehicle_type} en la Información de entrada, es decir su tipo de vehículo es None, la consulta es ambigua, y debemos preguntar por el tipo de vehículo.
+- Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type} y su ubicación: {location}, la consulta NO es ambigua !!!
+- Si el usuario pregunta sobre un plantas de revisión y no se conoce su ubicación: {location} es decir su ubicación es None, la consulta es ambigua, y debemos preguntar por la ubicación.
+- Si el usuario pregunta sobre las plantas de revisión o horarios de atencion de la planta y si ya se conocemos su ubicación: : {location}, entonces la consulta NO es ambigua !!!.
+- Cualquier otra consulta no considerada en las reglas anteriores, no se considera ambigua.
+
+# Formato de salida
+
+Produce una respuesta estructurada con los siguientes campos:
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],eee
+"""
+
+AMBIGUITY_CLASSIFIER_PROMPT_WELCOME = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
+
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+- tipo de vehículo: {vehicle_type}
+- ubicación del vehículo: {location}
+- ubicación de la planta: {plant_location}
+- modelo del vehículo: {model}
+- año de fabricación del vehículo: {annual}
+
+# Pasos de análisis
+- Mensajes de SALUDO, AGRADECIMIENTO, DESPEDIDA, CONFIRMACIÓN SIMPLE o INICIAL NUNCA SON ambiguos.
+- Mensajes de BIENVENIDA no son ambiguos.
+- Los mensajes de otros temas que no tenga que ver con la consulta de revisiones técnicas vehiculares, son ambiguos, y debemos guiar al usuario a que realice una consulta sobre revisiones técnicas vehiculares.
+
+# Formato de salida
+
+Produce una respuesta estructurada con los siguientes campos:
+- "is_ambiguous": [true/false],
+- "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
+- "clarification_question": [pregunta_específica_o_string_vacío],eee
 """

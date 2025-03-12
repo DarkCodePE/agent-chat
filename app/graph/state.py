@@ -8,6 +8,13 @@ from typing import List, Optional, TypedDict, Annotated
 
 from langgraph.graph import add_messages
 
+# Tu función reducer personalizada
+def preserve_info(old_value, new_value):
+    """Preserva el valor anterior si el nuevo es None"""
+    if new_value is None:
+        return old_value
+    return new_value
+
 
 class AmbiguityClassification(TypedDict):
     is_ambiguous: Optional[bool]  # For tracking whether the user's input is ambiguous
@@ -15,7 +22,7 @@ class AmbiguityClassification(TypedDict):
     clarification_question: Optional[str]
 
 
-# Primero, ampliamos el State para incluir información vehicular
+
 class VehicleInfo(TypedDict):
     vehicle_type: Optional[str]  # tipo de vehículo (taxi, particular, etc.)
     plant_location: Optional[str]  # ubicación de la planta
@@ -42,3 +49,9 @@ class State(TypedDict):
     vehicle_info: VehicleInfo  # For storing the classification of ambiguity
     previous_questions: Annotated[List[str], add]  # storing previous questions
     previous_categories: Annotated[List[str], add]  # storing previous categories
+    vehicle_type: Optional[str]  # tipo de vehículo (taxi, particular, etc.)
+    plant_location: Optional[str]  # ubicación de la planta
+    location: Optional[str]  # ubicación del vehículo
+    model: Optional[str]  # modelo del vehículo
+    annual: Optional[str]  # año de fabricación del vehículo
+    current_topic: Optional[str]
