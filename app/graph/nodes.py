@@ -14,6 +14,7 @@ from app.graph.state import State, AmbiguityClassification, VehicleInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 
 from app.services.document_service import DocumentService
+from app.tools.location_tools import setup_llm_with_tools
 
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2, \
     AMBIGUITY_CLASSIFIER_PROMPT_v4, AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT, AMBIGUITY_CLASSIFIER_PROMPT_PLANT, \
@@ -192,6 +193,7 @@ class SimpleSemanticRouter:
         else:
             return AMBIGUITY_CLASSIFIER_PROMPT_PLANT
 
+
 # Crear instancia de router semántico
 ambiguity_router = SimpleSemanticRouter()
 
@@ -285,27 +287,31 @@ def classify_ambiguity(state: State) -> dict:
     plant_location = state["plant_location"]
     previous_questions = state["previous_questions"]
     previous_categories = state["previous_categories"]
-    #current_topic = state["current_topic"]
+    current_topic = state["current_topic"]
     print("vehicle_type: ", vehicle_type)
     print("location: ", location)
     print("model: ", model)
     print("annual: ", annual)
     print("plant_location: ", plant_location)
     print("previous_questions: ", previous_questions)
+    print("current_topic: ", current_topic)
     # Preparar historial de conversación en formato legible
     conversation_history = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
     # Si hay un resumen, incluirlo también
     summary = state["summary"]
 
-    # Utilizar el enrutador semántico para elegir el prompt adecuado
-    prompt_template = ambiguity_router.get_prompt_template(user_query)
-
-    # Log de qué ruta se ha utilizado
-    route_name = ambiguity_router.route_query(user_query)
-    logger.info(f"Consulta '{user_query}' clasificada como '{route_name}'")
-    # prompt_template = state["current_topic"] is not None and state["current_topic"] == "requirements" and AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT or AMBIGUITY_CLASSIFIER_PROMPT_PLANT
-
+    # Utilizar el enrutador semántico para elegir el prompt adecuadoc
+    if current_topic == "requirements":
+        prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
+    elif current_topic == "plant_tariff":
+        prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_PLANT
+    elif current_topic == "welcome":
+        prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_WELCOME
+    else:
+        # Default prompt para casos no manejados
+        prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
+    logger.info(f"Prompt template: {prompt_template}")
     # Configurar el modelo para salida estructurada
     structured_llm = llm.with_structured_output(AmbiguityClassification)
 
@@ -330,7 +336,8 @@ def classify_ambiguity(state: State) -> dict:
 
     return {"ambiguity_classification": result}
 
-def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant_tariff","welcome"]]:
+
+def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant_tariff", "welcome"]]:
     """
     Route the user query to the desired information based on the context.
 
@@ -346,6 +353,7 @@ def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant
     route_name = ambiguity_router.route_query(user_query)
     logger.info(f"Consulta '{user_query}' clasificada como '{route_name}'")
     return {"current_topic": route_name}
+
 
 def ask_clarification(state: State) -> dict:
     """Genera una pregunta de clarificación al usuario."""
@@ -364,6 +372,61 @@ def ask_clarification(state: State) -> dict:
         "previous_questions": [clarification_question],  # CORREGIDO: ahora es lista
         "previous_categories": [ambiguity_category]  # CORREGIDO: ahora es lista
     }
+
+
+async def process_location_node(state: State) -> Dict[str, Any]:
+    """
+    Process a location-based query using the find_nearest_plant tool.
+
+    Args:
+        state: The current state including user input and previously captured location.
+
+    Returns:
+        Updated state with the results of the location tool call.
+    """
+    # Get the user's query
+    user_query = state["input"]
+
+    # Get the location from state if available, otherwise extract from query
+    location = state.get("location")
+
+    # Configure LLM with tools
+    llm_with_tools = setup_llm_with_tools()
+
+    # Create a prompt that instructs the LLM to use the location tool
+    system_message = """
+         Eres un asistente experto en ayudar a los usuarios a encontrar plantas de revisión técnica en Perú.
+
+         IMPORTANTE: Usa SIEMPRE la herramienta find_nearest_plant para encontrar las plantas más cercanas a la ubicación
+         proporcionada. No inventes información ni respondas sin usar la herramienta.
+
+         Después de obtener los resultados:
+         - Sé conversacional y amigable en tu respuesta
+         - Enfatiza las plantas más cercanas a la ubicación del usuario
+         - Incluye la información completa de dirección, distancia, teléfono y horario que proporciona la herramienta
+         - Si la herramienta devuelve un error, explica con amabilidad el problema y sugiere que proporcione otra ubicación
+         """
+
+    # Invoke the LLM with the tool
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_query}
+    ]
+
+    response = await llm_with_tools.ainvoke(messages)
+
+    # Update state with messages and the plant location if found
+    updated_messages = state.get("messages", []) + [
+        HumanMessage(content=user_query),
+        AIMessage(content=response)
+    ]
+    logger.info(f"Processed location query with result plant ID: {state.get('plant_location')}")
+    logger.info(f"response location: {response}")
+    logger.info(f"updated_messages: {updated_messages}")
+    return {"answer": response,
+            "messages": updated_messages,
+            "plant_location": state.get("plant_location")}
+
 
 def retrieve_context(state: State) -> dict:
     """
@@ -419,6 +482,52 @@ def retrieve_context(state: State) -> dict:
 
     logger.info(f"Retrieved {len(documents)} relevant documents for query: {query_text[:50]}...")
     return {"context": context, "documents": documents}
+
+
+def route_by_semantic(state: State) -> dict:
+    """
+    Determine the route based on semantic classification of the input.
+
+    This router decides whether to process a location-based query or go through
+    the regular ambiguity classification flow.
+
+    Args:
+        state: Current state with input and context
+
+    Returns:
+        Next node to execute: either "process_location" or "classify_ambiguity"
+    """
+
+    # Get the user query
+    user_query = state["input"]
+
+    # Use the semantic router to determine the route type
+    route_name = ambiguity_router.route_query(user_query)
+
+    return {"current_topic": route_name}
+
+
+def route_by_semantic_type(state: State) -> Literal["process_location", "classify_ambiguity"]:
+    """
+    Determine the route based on semantic classification of the input.
+
+    This router decides whether to process a location-based query or go through
+    the regular ambiguity classification flow.
+
+    Args:
+        state: Current state with input and context
+
+    Returns:
+        Next node to execute: either "process_location" or "classify_ambiguity"
+    """
+    current_topic = state["current_topic"]
+
+    # Special handling for location route
+    if current_topic == "location":
+        return "process_location"
+
+    # All other routes go to the regular flow
+    return "classify_ambiguity"
 
 
 def generate_response(state: State) -> Dict[str, Any]:
