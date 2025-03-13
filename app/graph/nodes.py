@@ -17,7 +17,7 @@ from app.services.document_service import DocumentService
 
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2, \
     AMBIGUITY_CLASSIFIER_PROMPT_v4, AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT, AMBIGUITY_CLASSIFIER_PROMPT_PLANT, \
-    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME
+    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME, AMBIGUITY_CLASSIFIER_PROMPT_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +66,24 @@ class SimpleSemanticRouter:
             "¿Cuál es la dirección de la planta más cercana?"
         ]
 
+        # Nueva categoría: ejemplos de ubicación
+        self.location_examples = [
+            "Estoy en San Juan de Lurigancho",
+            "Vivo en El Agustino",
+            "Me encuentro en Comas",
+            "Estoy cerca de Carabayllo",
+            "Mi ubicación es Ate",
+            "¿Cuál es la planta más cercana a Villa El Salvador?",
+            "Me gustaría ir a la planta más cercana a mi casa en San Martín",
+            "¿Hay alguna planta cerca de Los Olivos?",
+            "Necesito la dirección de la planta más cercana a Independencia"
+        ]
+
         # Pre-calcular embeddings para todas las categorías
         self.welcome_embeddings = None
         self.requirements_embeddings = None
         self.plant_tariff_embeddings = None
+        self.location_embeddings = None
         self._initialize_embeddings()
 
         logger.info("Router semántico simplificado inicializado")
@@ -85,11 +99,13 @@ class SimpleSemanticRouter:
             # Generar embeddings para ejemplos de planta/tarifas
             self.plant_tariff_embeddings = self.embeddings.embed_documents(self.plant_tariff_examples)
 
+            self.location_embeddings = self.embeddings.embed_documents(self.location_examples)
+
             logger.info("Embeddings inicializados para router semántico")
         except Exception as e:
             logger.error(f"Error inicializando embeddings: {str(e)}")
 
-    def route_query(self, query: str) -> Literal["welcome", "requirements", "plant_tariff"]:
+    def route_query(self, query: str) -> Literal["welcome", "requirements", "plant_tariff", "location"]:
         """
         Enruta una consulta del usuario a la ruta más semánticamente similar.
 
@@ -118,7 +134,8 @@ class SimpleSemanticRouter:
             # Calcular similitud con embeddings de plant_tariff
             plant_similarities = self._calculate_similarities(query_embedding, self.plant_tariff_embeddings)
             max_plant_similarity = max(plant_similarities)
-
+            # Calcular similitud con embeddings de ubicación
+            location_similarity = max(self._calculate_similarities(query_embedding, self.location_embeddings))
             # Determinar la ruta con mayor similitud
             max_similarity = max(max_welcome_similarity, max_req_similarity, max_plant_similarity)
 
@@ -128,6 +145,9 @@ class SimpleSemanticRouter:
             elif max_similarity == max_req_similarity:
                 logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
                 return "requirements"
+            elif max_similarity == max_plant_similarity:
+                logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
+                return "location"
             else:
                 logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
                 return "plant_tariff"
@@ -167,6 +187,8 @@ class SimpleSemanticRouter:
             return AMBIGUITY_CLASSIFIER_PROMPT_WELCOME
         elif route_name == "requirements":
             return AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
+        elif route_name == "location":
+            return AMBIGUITY_CLASSIFIER_PROMPT_LOCATION
         else:
             return AMBIGUITY_CLASSIFIER_PROMPT_PLANT
 
