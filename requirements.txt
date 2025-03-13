@@ -30,4 +30,4 @@ psycopg
 google-auth
 google-api-python-client
 python-dateutil
-numpy
+semantic-router

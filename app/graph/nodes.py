@@ -17,7 +17,7 @@ from app.services.document_service import DocumentService
 
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2, \
     AMBIGUITY_CLASSIFIER_PROMPT_v4, AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT, AMBIGUITY_CLASSIFIER_PROMPT_PLANT, \
-    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME
+    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME, AMBIGUITY_CLASSIFIER_PROMPT_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +66,24 @@ class SimpleSemanticRouter:
             "¿Cuál es la dirección de la planta más cercana?"
         ]
 
+        # Nueva categoría: ejemplos de ubicación
+        self.location_examples = [
+            "Estoy en San Juan de Lurigancho",
+            "Vivo en El Agustino",
+            "Me encuentro en Comas",
+            "Estoy cerca de Carabayllo",
+            "Mi ubicación es Ate",
+            "¿Cuál es la planta más cercana a Villa El Salvador?",
+            "Me gustaría ir a la planta más cercana a mi casa en San Martín",
+            "¿Hay alguna planta cerca de Los Olivos?",
+            "Necesito la dirección de la planta más cercana a Independencia"
+        ]
+
         # Pre-calcular embeddings para todas las categorías
         self.welcome_embeddings = None
         self.requirements_embeddings = None
         self.plant_tariff_embeddings = None
+        self.location_embeddings = None
         self._initialize_embeddings()
 
         logger.info("Router semántico simplificado inicializado")
@@ -85,11 +99,13 @@ class SimpleSemanticRouter:
             # Generar embeddings para ejemplos de planta/tarifas
             self.plant_tariff_embeddings = self.embeddings.embed_documents(self.plant_tariff_examples)
 
-            #logger.info("Embeddings inicializados para router semántico")
+            self.location_embeddings = self.embeddings.embed_documents(self.location_examples)
+
+            logger.info("Embeddings inicializados para router semántico")
         except Exception as e:
             logger.error(f"Error inicializando embeddings: {str(e)}")
 
-    def route_query(self, query: str) -> Literal["welcome", "requirements", "plant_tariff"]:
+    def route_query(self, query: str) -> Literal["welcome", "requirements", "plant_tariff", "location"]:
         """
         Enruta una consulta del usuario a la ruta más semánticamente similar.
 
@@ -118,18 +134,22 @@ class SimpleSemanticRouter:
             # Calcular similitud con embeddings de plant_tariff
             plant_similarities = self._calculate_similarities(query_embedding, self.plant_tariff_embeddings)
             max_plant_similarity = max(plant_similarities)
-
+            # Calcular similitud con embeddings de ubicación
+            location_similarity = max(self._calculate_similarities(query_embedding, self.location_embeddings))
             # Determinar la ruta con mayor similitud
             max_similarity = max(max_welcome_similarity, max_req_similarity, max_plant_similarity)
 
             if max_similarity == max_welcome_similarity:
-                #logger.info(f"Consulta: '{query}' enrutada a 'welcome' (similitud: {max_welcome_similarity:.3f})")
+                logger.info(f"Consulta: '{query}' enrutada a 'welcome' (similitud: {max_welcome_similarity:.3f})")
                 return "welcome"
             elif max_similarity == max_req_similarity:
-                #logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
+                logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
                 return "requirements"
+            elif max_similarity == max_plant_similarity:
+                logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
+                return "location"
             else:
-                #logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
+                logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
                 return "plant_tariff"
         except Exception as e:
             # En caso de error, enrutar por defecto a requisitos
@@ -167,6 +187,8 @@ class SimpleSemanticRouter:
             return AMBIGUITY_CLASSIFIER_PROMPT_WELCOME
         elif route_name == "requirements":
             return AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
+        elif route_name == "location":
+            return AMBIGUITY_CLASSIFIER_PROMPT_LOCATION
         else:
             return AMBIGUITY_CLASSIFIER_PROMPT_PLANT
 
@@ -264,17 +286,17 @@ def classify_ambiguity(state: State) -> dict:
     previous_questions = state["previous_questions"]
     previous_categories = state["previous_categories"]
     #current_topic = state["current_topic"]
-    # print("vehicle_type: ", vehicle_type)
-    # print("location: ", location)
-    # print("model: ", model)
-    # print("annual: ", annual)
-    # print("plant_location: ", plant_location)
-    # print("previous_questions: ", previous_questions)
+    print("vehicle_type: ", vehicle_type)
+    print("location: ", location)
+    print("model: ", model)
+    print("annual: ", annual)
+    print("plant_location: ", plant_location)
+    print("previous_questions: ", previous_questions)
     # Preparar historial de conversación en formato legible
-    #conversation_history = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+    conversation_history = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
     # Si hay un resumen, incluirlo también
-    #summary = state["summary"]
+    summary = state["summary"]
 
     # Utilizar el enrutador semántico para elegir el prompt adecuado
     prompt_template = ambiguity_router.get_prompt_template(user_query)
@@ -308,7 +330,6 @@ def classify_ambiguity(state: State) -> dict:
 
     return {"ambiguity_classification": result}
 
-
 def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant_tariff","welcome"]]:
     """
     Route the user query to the desired information based on the context.
@@ -325,7 +346,6 @@ def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant
     route_name = ambiguity_router.route_query(user_query)
     logger.info(f"Consulta '{user_query}' clasificada como '{route_name}'")
     return {"current_topic": route_name}
-
 
 def ask_clarification(state: State) -> dict:
     """Genera una pregunta de clarificación al usuario."""
@@ -344,7 +364,6 @@ def ask_clarification(state: State) -> dict:
         "previous_questions": [clarification_question],  # CORREGIDO: ahora es lista
         "previous_categories": [ambiguity_category]  # CORREGIDO: ahora es lista
     }
-
 
 def retrieve_context(state: State) -> dict:
     """

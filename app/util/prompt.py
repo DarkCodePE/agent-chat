@@ -318,3 +318,6 @@ Produce una respuesta estructurada con los siguientes campos:
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío],eee
 """
+AMBIGUITY_CLASSIFIER_PROMPT_LOCATION="""
+Analiza la consulta del usuario 
+"""
