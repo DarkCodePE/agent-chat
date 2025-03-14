@@ -14,6 +14,7 @@ from app.graph.state import State, AmbiguityClassification, VehicleInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 
 from app.services.document_service import DocumentService
+from app.services.location_services_map_box import get_district_coordinates, PLANTS, calculate_distances
 from app.tools.location_tools import setup_llm_with_tools
 
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2, \
@@ -135,10 +136,13 @@ class SimpleSemanticRouter:
             # Calcular similitud con embeddings de plant_tariff
             plant_similarities = self._calculate_similarities(query_embedding, self.plant_tariff_embeddings)
             max_plant_similarity = max(plant_similarities)
+
             # Calcular similitud con embeddings de ubicación
-            location_similarity = max(self._calculate_similarities(query_embedding, self.location_embeddings))
+            location_similarities = self._calculate_similarities(query_embedding, self.location_embeddings)
+            max_location_similarity = max(location_similarities)
+
             # Determinar la ruta con mayor similitud
-            max_similarity = max(max_welcome_similarity, max_req_similarity, max_plant_similarity)
+            max_similarity = max(max_welcome_similarity, max_req_similarity, max_plant_similarity, max_location_similarity)
 
             if max_similarity == max_welcome_similarity:
                 logger.info(f"Consulta: '{query}' enrutada a 'welcome' (similitud: {max_welcome_similarity:.3f})")
@@ -146,7 +150,7 @@ class SimpleSemanticRouter:
             elif max_similarity == max_req_similarity:
                 logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
                 return "requirements"
-            elif max_similarity == max_plant_similarity:
+            elif max_similarity == max_location_similarity:
                 logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
                 return "location"
             else:
@@ -235,7 +239,15 @@ def capture_important_info(state: State) -> dict:
 
     Tu tarea es extraer los siguientes detalles si están presentes:
     - Tipo de vehículo: tienes una lista de opciones para elegir ("taxi", "transporte particular", "transporte  escolar, "transporte de trabajadores", "transporte turístico", "transporte mercancia general", "transporte mercancia peligrosa"), si te brindan un tipo de vehículo diferente, entonces clasificalo dentro de la lista de opciones proporcionadas.
-    - Direccion de la persona (Ejemplo: "av. los alamos 123", "jr. los claveles 456")
+   - Ubicación del usuario: Extrae cualquier referencia a una ubicación donde se encuentra el usuario. Presta especial atención a frases como "estoy en", "vivo en", "me encuentro en", "cerca de", "mi ubicación es", "mi casa en", "estoy cerca de" seguidas de un nombre de distrito, zona o dirección en Lima. Incluye el nombre completo del distrito o zona mencionada.
+      Ejemplos:
+      - "Estoy en San Juan de Lurigancho" → "San Juan de Lurigancho"
+      - "Vivo en El Agustino" → "El Agustino"
+      - "estoy cerca del agustino" → "El Agustino"
+      - "Me encuentro en Comas" → "Comas"
+      - "¿Hay alguna planta cerca de Los Olivos?" → "Los Olivos"
+      - "av. los alamos 123"
+      - ""jr. los claveles 456"
     - Ubicación de la planta (Ejemplo: "sjl", "trapiche", "carabayllo")
     - Modelo del vehículo (Ejemplo: "toyota yaris", "hyundai accent", "kia rio")
     - Año de fabricación del vehículo (Ejemplo: "2010", "2015", "2020")
@@ -311,7 +323,7 @@ def classify_ambiguity(state: State) -> dict:
     else:
         # Default prompt para casos no manejados
         prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
-    logger.info(f"Prompt template: {prompt_template}")
+    #logger.info(f"Prompt template: {prompt_template}")
     # Configurar el modelo para salida estructurada
     structured_llm = llm.with_structured_output(AmbiguityClassification)
 
@@ -327,7 +339,7 @@ def classify_ambiguity(state: State) -> dict:
         model=model,
         annual=annual,
     )
-    print("system_instructions: ", system_instructions)
+    # print("system_instructions: ", system_instructions)
     # Invocar el modelo
     result = structured_llm.invoke([
         SystemMessage(content=system_instructions),
@@ -360,12 +372,14 @@ def ask_clarification(state: State) -> dict:
     # Obtener la información de ambigüedad
     clarification_question = state["ambiguity_classification"]["clarification_question"]
     ambiguity_category = state["ambiguity_classification"]["ambiguity_category"]
-    print("clarification_question: ", clarification_question)
-    print("ambiguity_category: ", ambiguity_category)
+    # print("clarification_question: ", clarification_question)
+    # print("ambiguity_category: ", ambiguity_category)
     # Construir respuesta amigable
     mensaje = f"Para ayudarte mejor, necesito más información. {clarification_question}"
     #messages = state["messages"] + [AIMessage(content=mensaje)]
-
+    print("state ask current_topic: ", state["current_topic"])
+    print("state ask vehicle_type: ", state["vehicle_type"])
+    print("state ask location: ", state["location"])
     return {
         "answer": mensaje,
         "messages": [AIMessage(content=mensaje)],  # AIMessage porque es el asistente quien habla
@@ -374,7 +388,7 @@ def ask_clarification(state: State) -> dict:
     }
 
 
-async def process_location_node(state: State) -> Dict[str, Any]:
+def process_location_node(state: State) -> Dict[str, Any]:
     """
     Process a location-based query using the find_nearest_plant tool.
 
@@ -413,20 +427,95 @@ async def process_location_node(state: State) -> Dict[str, Any]:
         {"role": "user", "content": user_query}
     ]
 
-    response = await llm_with_tools.ainvoke(messages)
+    response = llm_with_tools.invoke(messages)
 
     # Update state with messages and the plant location if found
+    state["answer"] = response
+    state["messages"] += [
+        HumanMessage(content=state["input"]),
+        AIMessage(content=response)
+    ]
+    #logger.info(f"Processed location query with result plant ID: {state.get('plant_location')}")
+    #logger.info(f"response location: {response}")
+    print("state process current_topic: ", state["current_topic"])
+    print("state process vehicle_type: ", state["vehicle_type"])
+    print("state process location: ", state["location"])
+    #logger.info(f"updated_messages: {updated_messages}")
+    return state
+
+
+def process_location_node_v2(state: State) -> Dict[str, Any]:
+    """
+    Process a location-based query directly, without using tools.
+
+    Args:
+        state: The current state including user input and previously captured location.
+
+    Returns:
+        Updated state with the results of the location query.
+    """
+    # Get the user's query
+    user_query = state["input"]
+
+    # Get the location from state if available, otherwise extract from query
+    location = state.get("location")
+
+    try:
+        # Get coordinates for the user's location
+        user_lat, user_lng = get_district_coordinates(location)
+
+        # Get all plants
+        all_plants = list(PLANTS.values())
+
+        # Calculate distances from user location to all plants
+        plants_with_distances = calculate_distances(user_lat, user_lng, all_plants)
+
+        # Sort plants by distance
+        sorted_plants = sorted(plants_with_distances, key=lambda x: x["distance_km"])
+
+        # Get the 3 nearest plants
+        nearest_plants = sorted_plants[:3]
+
+        # Format response for user
+        response = f"Las plantas más cercanas a {location} son:\n\n"
+
+        for i, plant in enumerate(nearest_plants, 1):
+            response += f"{i}. {plant['name']}\n"
+            response += f"   📍 Dirección: {plant['address']}\n"
+
+            if plant.get("distance_text") != "No disponible":
+                response += f"   🚗 Distancia: {plant['distance_text']} (aprox. {plant['duration_text']} en auto)\n"
+            else:
+                response += f"   🚗 Distancia: Información no disponible\n"
+
+            response += f"   📞 Teléfono: {plant['phone']}\n"
+            response += f"   ⏰ Horario: {plant['hours']}\n\n"
+
+        # Add note about driving conditions
+        response += "Los tiempos son estimados y pueden variar según el tráfico y las condiciones de la vía."
+
+        # Save the plant_location for future reference
+        plant_location = nearest_plants[0]["id"] if nearest_plants else None
+
+    except Exception as e:
+        logger.error(f"Error finding nearest plants: {str(e)}")
+        response = (
+            f"Lo siento, tuve problemas para encontrar las plantas más cercanas a {location}. "
+            f"Por favor intenta con otra ubicación o distrito específico en Lima."
+        )
+        plant_location = None
+
+    # Update state
     updated_messages = state.get("messages", []) + [
         HumanMessage(content=user_query),
         AIMessage(content=response)
     ]
-    logger.info(f"Processed location query with result plant ID: {state.get('plant_location')}")
-    logger.info(f"response location: {response}")
-    logger.info(f"updated_messages: {updated_messages}")
-    return {"answer": response,
-            "messages": updated_messages,
-            "plant_location": state.get("plant_location")}
 
+    return {
+        "answer": response,
+        "messages": updated_messages,
+        "plant_location": plant_location
+    }
 
 def retrieve_context(state: State) -> dict:
     """
@@ -503,11 +592,11 @@ def route_by_semantic(state: State) -> dict:
 
     # Use the semantic router to determine the route type
     route_name = ambiguity_router.route_query(user_query)
-
+    logger.info("current_topic111: ", route_name)
     return {"current_topic": route_name}
 
 
-def route_by_semantic_type(state: State) -> Literal["process_location", "classify_ambiguity"]:
+def route_by_semantic_type(state: State) -> str:
     """
     Determine the route based on semantic classification of the input.
 
@@ -521,11 +610,14 @@ def route_by_semantic_type(state: State) -> Literal["process_location", "classif
         Next node to execute: either "process_location" or "classify_ambiguity"
     """
     current_topic = state["current_topic"]
-
+    logger.info("current_topic: ", current_topic)
+    print("current_topicxxx: ", current_topic)
     # Special handling for location route
     if current_topic == "location":
         return "process_location"
-
+    print("state route_by_semantic_type current_topic: ", state["current_topic"])
+    print("state route_by_semantic_type vehicle_type: ", state["vehicle_type"])
+    print("state route_by_semantic_type location: ", state["location"])
     # All other routes go to the regular flow
     return "classify_ambiguity"
 
@@ -576,6 +668,9 @@ def generate_response(state: State) -> Dict[str, Any]:
         ]
 
         logger.info(f"Generated response for input: {state['input'][:50]}...")
+        print("state generate current_topic: ", state["current_topic"])
+        print("state generate vehicle_type: ", state["vehicle_type"])
+        print("state generate location: ", state["location"])
         return state
 
     except Exception as e:

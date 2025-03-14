@@ -11,7 +11,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.graph.state import State
 from app.graph.nodes import retrieve_context, generate_response, summarize_conversation, classify_ambiguity, \
-    ask_clarification, capture_important_info, route_by_semantic_type, process_location_node, route_by_semantic
+    ask_clarification, capture_important_info, route_by_semantic_type, process_location_node, route_by_semantic, \
+    process_location_node_v2
 from app.database.postgres import get_postgres_saver, get_postgres_store, get_async_postgres_saver
 import os
 from dotenv import load_dotenv
@@ -45,7 +46,7 @@ def create_chat_graph():
         workflow.add_node("retrieve_context", retrieve_context)
         workflow.add_node("capture_important_info", capture_important_info)
         workflow.add_node("route_by_semantic", route_by_semantic)
-        workflow.add_node("process_location", process_location_node)
+        workflow.add_node("process_location", process_location_node_v2)
         workflow.add_node("classify_ambiguity", classify_ambiguity)
         workflow.add_node("ask_clarification", ask_clarification)
         workflow.add_node("generate_response", generate_response)
@@ -56,7 +57,7 @@ def create_chat_graph():
         workflow.add_edge(START, "retrieve_context")
         workflow.add_edge(START, "capture_important_info")
         # Fan-in: Ambos nodos alimentan a classify_ambiguity
-        workflow.add_edge(["retrieve_context", "capture_important_info"], "route_by_semantic_type")
+        workflow.add_edge(["retrieve_context", "capture_important_info"], "route_by_semantic")
 
         # Conditional routing based on semantic type
         workflow.add_conditional_edges(
