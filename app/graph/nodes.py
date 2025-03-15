@@ -8,9 +8,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_qdrant import Qdrant
+from numpy.f2py.crackfortran import previous_context
 from qdrant_client import QdrantClient
 
-from app.graph.state import State, AmbiguityClassification, VehicleInfo
+from app.graph.state import State, AmbiguityClassification, VehicleInfo, PlantInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 
 from app.services.document_service import DocumentService
@@ -454,57 +455,78 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     Returns:
         Updated state with the results of the location query.
     """
+    llm = ChatOpenAI(model=LLM_MODEL)
+
     # Get the user's query
     user_query = state["input"]
 
     # Get the location from state if available, otherwise extract from query
-    location = state.get("location")
+    user_query = state["input"]
+    context = state["context"]
+    vehicle_type = state["vehicle_type"]
+    location = state["location"]
+    model = state["model"]
+    annual = state["annual"]
+    #plant_location = state["plant_location"]
+    previous_questions = state["previous_questions"]
+    previous_categories = state["previous_categories"]
+    #current_topic = state["current_topic"]
 
-    try:
-        # Get coordinates for the user's location
-        user_lat, user_lng = get_district_coordinates(location)
+    # Get coordinates for the user's location
+    user_lat, user_lng = get_district_coordinates(location)
 
-        # Get all plants
-        all_plants = list(PLANTS.values())
+    # Get all plants
+    all_plants = list(PLANTS.values())
 
-        # Calculate distances from user location to all plants
-        plants_with_distances = calculate_distances(user_lat, user_lng, all_plants)
+    # Calculate distances from user location to all plants
+    plants_with_distances = calculate_distances(user_lat, user_lng, all_plants)
 
-        # Sort plants by distance
-        sorted_plants = sorted(plants_with_distances, key=lambda x: x["distance_km"])
+    # Sort plants by distance
+    sorted_plants = sorted(plants_with_distances, key=lambda x: x["distance_km"])
 
-        # Get the 3 nearest plants
-        nearest_plants = sorted_plants[:3]
+    # Get the 3 nearest plants
+    nearest_plants = sorted_plants[:3]
 
-        # Format response for user
-        response = f"Las plantas más cercanas a {location} son:\n\n"
+    # Format response for user
+    response = f"Las plantas más cercanas a {location} son:\n\n"
 
-        for i, plant in enumerate(nearest_plants, 1):
-            response += f"{i}. {plant['name']}\n"
-            response += f"   📍 Dirección: {plant['address']}\n"
+    for i, plant in enumerate(nearest_plants, 1):
+        response += f"{i}. {plant['name']}\n"
+        response += f"   📍 Dirección: {plant['address']}\n"
 
-            if plant.get("distance_text") != "No disponible":
-                response += f"   🚗 Distancia: {plant['distance_text']} (aprox. {plant['duration_text']} en auto)\n"
-            else:
-                response += f"   🚗 Distancia: Información no disponible\n"
+        if plant.get("distance_text") != "No disponible":
+            response += f"   🚗 Distancia: {plant['distance_text']} (aprox. {plant['duration_text']} en auto)\n"
+        else:
+            response += f"   🚗 Distancia: Información no disponible\n"
 
-            response += f"   📞 Teléfono: {plant['phone']}\n"
-            response += f"   ⏰ Horario: {plant['hours']}\n\n"
+        response += f"   📞 Teléfono: {plant['phone']}\n"
+        response += f"   ⏰ Horario: {plant['hours']}\n\n"
 
-        # Add note about driving conditions
-        response += "Los tiempos son estimados y pueden variar según el tráfico y las condiciones de la vía."
+    # Add note about driving conditions
+    response += "Los tiempos son estimados y pueden variar según el tráfico y las condiciones de la vía."
+    system_instructions = AMBIGUITY_CLASSIFIER_PROMPT_LOCATION.format(
+        user_query=user_query,
+        retrieved_context=context,
+        previous_questions=previous_questions,
+        previous_categories=previous_categories,
+        vehicle_type=vehicle_type,
+        location=location,
+        plant_location=nearest_plants,
+        model=model,
+        annual=annual,
+    )
+    # Save the plant_location for future reference
+    plant_location = nearest_plants[0]["id"] if nearest_plants else None
 
-        # Save the plant_location for future reference
-        plant_location = nearest_plants[0]["id"] if nearest_plants else None
+    human_message = f"Usando la información de las plantas cercanas a {location}, formula una respuesta amigable y detallada que ayude al usuario a encontrar la planta más conveniente."
 
-    except Exception as e:
-        logger.error(f"Error finding nearest plants: {str(e)}")
-        response = (
-            f"Lo siento, tuve problemas para encontrar las plantas más cercanas a {location}. "
-            f"Por favor intenta con otra ubicación o distrito específico en Lima."
-        )
-        plant_location = None
+    structured_llm = llm.with_structured_output(PlantInfo)
 
+    result = llm.invoke([
+        SystemMessage(content=system_instructions),
+        HumanMessage(content=human_message)
+    ])
+    logger.info(f"Este es el resultado '{result}'")
     # Update state
     updated_messages = state.get("messages", []) + [
         HumanMessage(content=user_query),
@@ -512,7 +534,7 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     ]
 
     return {
-        "answer": response,
+        "answer": result.content,
         "messages": updated_messages,
         "plant_location": plant_location
     }
@@ -661,17 +683,23 @@ def generate_response(state: State) -> Dict[str, Any]:
         })
 
         # Guardar la respuesta y actualizar el historial de chat
-        state["answer"] = response
-        state["messages"] += [
+        # state["answer"] = response
+        # state["messages"] += [
+        #     HumanMessage(content=state["input"]),
+        #     AIMessage(content=response)
+        # ]
+        updated_messages = state.get("messages", []) + [
             HumanMessage(content=state["input"]),
             AIMessage(content=response)
         ]
-
         logger.info(f"Generated response for input: {state['input'][:50]}...")
         print("state generate current_topic: ", state["current_topic"])
         print("state generate vehicle_type: ", state["vehicle_type"])
         print("state generate location: ", state["location"])
-        return state
+        return {
+            "answer": response,
+            "messages": updated_messages,
+        }
 
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")

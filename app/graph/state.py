@@ -21,7 +21,10 @@ class AmbiguityClassification(TypedDict):
     ambiguity_category: Optional[str]  # For storing the category of ambiguity
     clarification_question: Optional[str]
 
-
+class PlantInfo(TypedDict):
+    nearest_plants: Optional[List[str]]
+    near_plant: Optional[str]
+    answer: Optional[str]
 
 class VehicleInfo(TypedDict):
     vehicle_type: Optional[str]  # tipo de vehículo (taxi, particular, etc.)

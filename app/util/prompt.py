@@ -291,7 +291,7 @@ AMBIGUITY_CLASSIFIER_PROMPT_PLANT = """Analiza la consulta del usuario sobre rev
 Produce una respuesta estructurada con los siguientes campos:
 - "is_ambiguous": [true/false],
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
-- "clarification_question": [pregunta_específica_o_string_vacío],eee
+- "clarification_question": [pregunta_específica_o_string_vacío]
 """
 
 AMBIGUITY_CLASSIFIER_PROMPT_WELCOME = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
@@ -316,8 +316,37 @@ AMBIGUITY_CLASSIFIER_PROMPT_WELCOME = """Analiza la consulta del usuario sobre r
 Produce una respuesta estructurada con los siguientes campos:
 - "is_ambiguous": [true/false],
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
-- "clarification_question": [pregunta_específica_o_string_vacío],eee
+- "clarification_question": [pregunta_específica_o_string_vacío]
 """
 AMBIGUITY_CLASSIFIER_PROMPT_LOCATION="""
-Analiza la consulta del usuario 
+"Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
+
+**Información de entrada:**
+- Contexto recuperado: "{retrieved_context}"
+- Preguntas previas realizadas: {previous_questions}
+- Categorías previas consultadas: {previous_categories}
+- tipo de vehículo: {vehicle_type}
+- ubicación del vehículo: {location}
+- lista de plantas mas cercanas: {plant_location}
+- modelo del vehículo: {model}
+- año de fabricación del vehículo: {annual}
+
+ Pasos de análisis
+
+1. **Comprender el Contexto**: Primero, revisa la consulta del usuario: {user_query} y luego Analiza la consulta del usuario considerando el contexto de la conversación previa {previous_questions}.
+
+2. **Evaluar el Contexto**: una vez que compredas el contexto, debes usar la informacion de entrada para orfrecer un respues coherente.
+3.**Formular la respuesta segun la reglas**:
+- SI el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type}, y  conocemos su ubicación: {location}, y la planta {plant_location}, debes responder las tarifas segun el vehiuclo, esta repuesta debe set la planta {plant_location} mas cercana econtrada.
+- Si el usuario pregunta sobre tarifas y no se conoce su tipo de vehículo : {vehicle_type} en la Información de entrada, solo debes respoder sobre la informacion de la plantas mas cercanas,
+- Si el usuario pregunta sobre un plantas de revisión y se conoce su ubicación: {location} y no se conoce su tipo de vehiculo  {vehicle_type}, entonces responde sobre la planta mas cercanas 
+- Si el usuario pregunta sobre un plantas de revisión y no se conoce informacion sobre la plantas cercanas {plant_location}, la repuesta debe ser un pregunta para saber su ubicacion
+-  Si el usuario pregunta sobre un plantas de revisión y no se conoce informacion sobre el tipo de vehiculo {vehicle_type}, la repuesta debe ser un pregunta para saber su ubicacion
+- Cualquier otra consulta no considerada en las reglas anteriores, debe ser respondida con una pregunta sobre la informacion que crees que hace falta para poder brindar una mejor atencion.
+
+# Tono conversacional:
+- Usa expresiones como "¡Buenas noticias!", "Te cuento que...", "La mejor opción para ti sería...", "¿Te sirve esta ubicación?"
+- Humaniza la respuesta con frases como "Según veo", "Te recomendaría", "Si fuera tú, consideraría..."
+- Evita sonar como un listado técnico de información.
+ Formato de salida
 """
