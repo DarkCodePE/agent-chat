@@ -242,28 +242,102 @@ def capture_important_info(state: State) -> dict:
     question = state["input"]
     previous_questions = state["previous_questions"]
 
-    # Configuramos el LLM para obtener salida estructurada
-    structured_llm = llm.with_structured_output(VehicleInfo)
-
     system_instructions = IMPORTANT_INFO_PROMPT.format(
         question=question,
         messages=messages,
         previous_questions=previous_questions
     )
+
+    # Configuramos el LLM para obtener salida estructurada
+    structured_llm = llm.with_structured_output(VehicleInfo)
+
     # Invocamos el modelo
     result = structured_llm.invoke([
         SystemMessage(content=system_instructions),
         HumanMessage(content="Extrae los puntos clave de la conversación")
     ])
+    if state["plant_location"] is None:
+        plant_location = result["plant_location"]
+    else:
+        plant_location = state["plant_location"]
 
     print("vehicle_type: ", result["vehicle_type"])
     print("location: ", result["location"])
     print("model: ", result["model"])
     print("annual: ", result["annual"])
+    print("plant_location: ", plant_location)
     # Con reducers, simplemente devolvemos los resultados
     # La función reducer se encargará de preservar los valores existentes
     return {
         "vehicle_type": result["vehicle_type"],
+        "location": result["location"],
+        "plant_location": plant_location,
+        "model": result["model"],
+        "annual": result["annual"]
+    }
+
+
+def capture_important_info_old(state: State) -> dict:
+    """
+    Analiza la conversación para extraer y almacenar información importante
+    sobre el vehículo y las necesidades del usuario.
+    """
+    llm = ChatOpenAI(model=LLM_MODEL)
+
+    # Obtenemos los mensajes recientes para analizar
+    messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
+    # logger.info(f"messages: {messages}")
+    question = state["input"]
+    # Prompt para extraer la información clave
+    system_prompt = f"""
+    Eres un asistente experto en analizar conversaciones para extraer información importante.
+
+    A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
+
+    Tu tarea es extraer los siguientes detalles si están presentes:
+    - Tipo de vehículo: tienes una lista de opciones para elegir ("taxi", "transporte particular", "transporte  escolar, "transporte de trabajadores", "transporte turístico", "transporte mercancia general", "transporte mercancia peligrosa"), si te brindan un tipo de vehículo diferente, entonces clasificalo dentro de la lista de opciones proporcionadas.
+   - Ubicación del usuario: Extrae cualquier referencia a una ubicación donde se encuentra el usuario. Presta especial atención a frases como "estoy en", "vivo en", "me encuentro en", "cerca de", "mi ubicación es", "mi casa en", "estoy cerca de" seguidas de un nombre de distrito, zona o dirección en Lima. Incluye el nombre completo del distrito o zona mencionada.
+      Ejemplos:
+      - "Estoy en San Juan de Lurigancho" → "San Juan de Lurigancho"
+      - "Vivo en El Agustino" → "El Agustino"
+      - "estoy cerca del agustino" → "El Agustino"
+      - "Me encuentro en Comas" → "Comas"
+      - "¿Hay alguna planta cerca de Los Olivos?" → "Los Olivos"
+      - "av. los alamos 123"
+      - ""jr. los claveles 456"
+    - Ubicación de la planta (Ejemplo: "sjl", "trapiche", "carabayllo")
+    - Modelo del vehículo (Ejemplo: "toyota yaris", "hyundai accent", "kia rio")
+    - Año de fabricación del vehículo (Ejemplo: "2010", "2015", "2020")
+
+    Si algún dato no está disponible en la conversación, devuelve null para ese campo.
+
+    pregunta: 
+    {question}
+    Conversación:
+    {messages}
+
+    Importante: 
+    1. No inventes información que no esté explícitamente mencionada en la conversación
+    2. Presta especial atención a las respuestas del usuario
+    """
+
+    # Configuramos el LLM para obtener salida estructurada
+    structured_llm = llm.with_structured_output(VehicleInfo)
+
+    # Invocamos el modelo
+    result = structured_llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content="Extrae los puntos clave de la conversación")
+    ])
+    if state.get("plant_location") is None:
+        plant_location = result["plant_location"]
+    else:
+        plant_location = state["plant_location"]
+    # Con reducers, simplemente devolvemos los resultados
+    # La función reducer se encargará de preservar los valores existentes
+    return {
+        "vehicle_type": result["vehicle_type"],
+        "plant_location": plant_location,
         "location": result["location"],
         "model": result["model"],
         "annual": result["annual"]

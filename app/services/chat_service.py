@@ -39,7 +39,9 @@ def process_message(
             }
         }
         logger.info(f"Configuration set for thread {thread_id}: {config}")
-
+        save_state = graph.get_state(config)
+        plant_location = save_state.values.get("plant_location")
+        print("plant_location: ", plant_location)
         # Prepare the initial state
         initial_state = {
             "input": message,
@@ -48,7 +50,8 @@ def process_message(
             "answer": "",
             "documents": [],
             "web_search": "No",
-            "summary": ""  # Make sure all expected state fields are initialized
+            "summary": "",  # Make sure all expected state fields are initialized
+            "plant_location": plant_location
         }
         logger.info(f"Initial state prepared for thread {thread_id}")
 
