@@ -5,6 +5,7 @@ Eres Martín, el Asistente Virtual de Revisiones Técnicas del Perú. Hablas com
 - tipo de vehículo: {vehicle_type}
 - ubicación del vehículo: {location}
 - ubicación de la planta: {plant_location}
+- pregunta: {user_query}
 
 # Contexto
 {context}
@@ -47,7 +48,9 @@ Responde de forma natural, como lo haría un asesor humano. Tu respuesta deberí
 "Si quieres más detalles, puedes revisar [nombre de la sección relevante](URL correspondiente)"
 
 #REGLA VALIDACION
+- Revisa detalladamete la consulta del usuario: {user_query} y la conversacion previa {previous_questions} y la Información de entrada, como tipo de vehiculo: {vehicle_type} y ubicación: {location} y planta: {plant_location} para entender el contexto de la conversacion, y responde con la información que necesitas.
 - Si el usuario pregunta sobre las plantas de revisión o horarios de atencion de la planta y si ya se conocemos el tipo de vehiculo {vehicle_type} y su ubicación: : {location} y la planta mas cercana {plant_location}, entonces la respuesta de la tarifa debe estar relacionada a la ubicacion de planta.
+- Si el usuario pregunta sobre costos y ya conocemos la planta: {plant_location}, y el tipo de vehiculo: {vehicle_type}, entonces la respuesta de la tarifa debe estar relacionada a la ubicacion de planta !!!.
 
 # Cuando no tengas información suficiente
 
@@ -117,7 +120,6 @@ Produce una respuesta estructurada con los siguientes campos:
 - Si el usuario pregunta sobre procedimientos y ya conocemos su tipo de vehículo, la consulta NO es ambigua !!!.
 - Si el usuario pregunta sobre la planta de revisión y ya conocemos su ubicación, la consulta NO es ambigua !!!.
 """
-
 
 AMBIGUITY_CLASSIFIER_PROMPT_v2 = """Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
 
@@ -287,6 +289,7 @@ AMBIGUITY_CLASSIFIER_PROMPT_PLANT = """Analiza la consulta del usuario sobre rev
 - Las preguntas de clarificación deben ser conversacionales, amigables y de acuerdo al contexto de la conversacion.
 
 # Consideraciones especiales para tarifas y plantas
+- Si el usuario pregunta sobre tarifas y ya conocemos la planta: {plant_location}, la pregunta no es ambigua.
 - SI el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type}, y no conocemos su ubicación: {location}, es decir su ubicación es None, la consulta es ambigua, y debemos preguntar por la ubicación.
 - Si el usuario pregunta sobre tarifas y no se conoce su tipo de vehículo : {vehicle_type} en la Información de entrada, es decir su tipo de vehículo es None, la consulta es ambigua, y debemos preguntar por el tipo de vehículo.
 - Si el usuario pregunta sobre tarifas y ya conocemos su tipo de vehículo : {vehicle_type} y su ubicación: {location}, la consulta NO es ambigua !!!
@@ -310,7 +313,6 @@ AMBIGUITY_CLASSIFIER_PROMPT_WELCOME = """Analiza la consulta del usuario sobre r
 - Categorías previas consultadas: {previous_categories}
 - tipo de vehículo: {vehicle_type}
 - ubicación del vehículo: {location}
-- ubicación de la planta: {plant_location}
 - modelo del vehículo: {model}
 - año de fabricación del vehículo: {annual}
 
@@ -326,7 +328,7 @@ Produce una respuesta estructurada con los siguientes campos:
 - "ambiguity_category": [TIPO_VEHICULO/PRIMERA_VEZ_RENOVACION/DOCUMENTACION/CRONOGRAMA/PLANTAS_UBICACION/ESTADO_VEHICULO/PROCEDIMIENTO/NINGUNA],
 - "clarification_question": [pregunta_específica_o_string_vacío]
 """
-AMBIGUITY_CLASSIFIER_PROMPT_LOCATION="""
+AMBIGUITY_CLASSIFIER_PROMPT_LOCATION = """
 "Analiza la consulta del usuario sobre revisiones técnicas vehiculares para determinar si es ambigua y requiere clarificación antes de proporcionar una respuesta completa.
 
 **Información de entrada:**
@@ -358,3 +360,69 @@ AMBIGUITY_CLASSIFIER_PROMPT_LOCATION="""
 - Evita sonar como un listado técnico de información.
  Formato de salida
 """
+
+IMPORTANT_INFO_PROMPT = """ Eres un asistente experto en analizar conversaciones sobre revisiones técnicas vehiculares en Perú.
+
+      Tu tarea es extraer con precisión los siguientes detalles si están presentes en la conversación:
+
+      1. Tipo de vehículo: Clasifica en una de estas categorías únicamente:
+         - taxi
+         - transporte particular
+         - transporte escolar
+         - transporte de trabajadores
+         - transporte turístico
+         - transporte mercancia general
+         - transporte mercancia peligrosa
+
+      2. Modelo del vehículo: Identifica correctamente marcas y modelos de automóviles como:
+         - Toyota (Yaris, Corolla, Hilux, RAV4, etc.)
+         - Hyundai (Accent, Elantra, Tucson, Santa Fe, etc.)
+         - Kia (Rio, Cerato, Sportage, Picanto, etc.)
+         - Nissan (Sentra, Versa, X-Trail, Frontier, etc.)
+         - Chevrolet (Sail, Spark, Tracker, etc.)
+         - Suzuki (Swift, Baleno, Vitara, etc.)
+         - Mitsubishi (L200, Outlander, ASX, etc.)
+         - Otros modelos comunes en Perú
+
+         NOTA IMPORTANTE: Los nombres de modelos como "Kia Cerato", "Toyota Yaris", etc., son SIEMPRE modelos de vehículos, 
+         NO son ubicaciones ni distritos. Nunca clasifiques un nombre de vehículo como ubicación.Infiere el tipo de vehículo seggun la marca y modelo de la auto.
+
+      3. Año de fabricación del vehículo: Cualquier año mencionado en contexto del vehículo (Ej: 2010, 2015, 2020)
+
+      4. Ubicación del usuario: Extrae referencias a ubicaciones donde se encuentra el usuario. Estas serán típicamente 
+         distritos de Lima o el Callao como:
+         - San Juan de Lurigancho
+         - El Agustino
+         - Comas
+         - Los Olivos
+         - Villa El Salvador
+         - Miraflores
+         - San Isidro
+         - Callao
+         - Etc.
+
+         Busca frases como "estoy en", "vivo en", "me encuentro en", "cerca de", seguidas de un nombre de distrito.
+
+      5. Ubicación de la planta: Referencias específicas a plantas de revisión técnica como:
+         - sjl (San Juan de Lurigancho)
+         - trapiche
+         - carabayllo
+         - ate
+         - otros nombres de plantas mencionados
+
+      Si algún dato no está disponible en la conversación, devuelve null para ese campo.
+
+      pregunta: 
+      {question}
+      Conversación:
+      {messages}
+      preguntas previas:
+      {previous_questions}
+
+      Reglas importantes: 
+      1. NO inventes información que no esté explícitamente mencionada en la conversación, infiere el tipo de vehículo seggun la marca y modelo de la auto.
+      2. NUNCA confundas marcas y modelos de vehículos con ubicaciones
+      3. Cuando encuentres referencias como "Tengo un Kia Cerato", siempre clasifica esto como modelo de vehículo
+      4. Cuando encuentres referencias como "Estoy en San Borja", siempre clasifica esto como ubicación del usuario
+      5. La información más reciente debe tener prioridad en caso de contradicciones
+      """

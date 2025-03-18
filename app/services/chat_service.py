@@ -100,11 +100,6 @@ async def get_chat_history(thread_id: str) -> List[Dict[str, Any]]:
         # Create a configuration for the thread
         config = {"configurable": {"thread_id": thread_id}}
 
-        # Check if the graph has state for this thread
-        if not graph.exists(config):
-            logger.info(f"No state exists for thread {thread_id}")
-            return []
-
         # Use graph.get_state() to retrieve the state properly
         try:
             state_snapshot = graph.get_state(config)

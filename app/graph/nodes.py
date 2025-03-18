@@ -20,7 +20,7 @@ from app.tools.location_tools import setup_llm_with_tools
 
 from app.util.prompt import ASSISTANT_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT, AMBIGUITY_CLASSIFIER_PROMPT_v2, \
     AMBIGUITY_CLASSIFIER_PROMPT_v4, AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT, AMBIGUITY_CLASSIFIER_PROMPT_PLANT, \
-    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME, AMBIGUITY_CLASSIFIER_PROMPT_LOCATION
+    AMBIGUITY_CLASSIFIER_PROMPT_WELCOME, AMBIGUITY_CLASSIFIER_PROMPT_LOCATION, IMPORTANT_INFO_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,12 @@ class SimpleSemanticRouter:
             "¿Cuáles son los requisitos para la revisión técnica de mi camioneta?",
             "¿Qué necesito presentar para la inspección de mi auto?",
             "¿Qué papeles tengo que llevar para la revisión técnica?",
-            "¿Qué documentos se requieren para la inspección vehicular?"
+            "¿Qué documentos se requieren para la inspección vehicular?",
+            "toyota", "hyundai", "kia", "nissan", "chevrolet", "suzuki",
+            "mitsubishi", "volkswagen", "honda", "ford", "mazda", "bmw",
+            "mercedes", "audi", "renault", "peugeot", "citroën", "fiat",
+            "jeep", "subaru", "volvo", "lexus", "changan", "jac", "mg",
+            "geely", "great wall", "byd", "dfsk", "ssangyong", "haval"
         ]
 
         self.plant_tariff_examples = [
@@ -67,6 +72,9 @@ class SimpleSemanticRouter:
             "¿Qué precio tiene la inspección para una moto?",
             "¿A qué hora abren las plantas de revisión?",
             "¿Cuál es la dirección de la planta más cercana?"
+            "¿Cuanto es el costo?"
+            "¿Cuanto me va salir eso?"
+            "¿Cual es costo total?"
         ]
 
         # Nueva categoría: ejemplos de ubicación
@@ -146,16 +154,16 @@ class SimpleSemanticRouter:
             max_similarity = max(max_welcome_similarity, max_req_similarity, max_plant_similarity, max_location_similarity)
 
             if max_similarity == max_welcome_similarity:
-                logger.info(f"Consulta: '{query}' enrutada a 'welcome' (similitud: {max_welcome_similarity:.3f})")
+                #logger.info(f"Consulta: '{query}' enrutada a 'welcome' (similitud: {max_welcome_similarity:.3f})")
                 return "welcome"
             elif max_similarity == max_req_similarity:
-                logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
+                #logger.info(f"Consulta: '{query}' enrutada a 'requirements' (similitud: {max_req_similarity:.3f})")
                 return "requirements"
             elif max_similarity == max_location_similarity:
-                logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
+                #logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
                 return "location"
             else:
-                logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
+                #logger.info(f"Consulta: '{query}' enrutada a 'plant_tariff' (similitud: {max_plant_similarity:.3f})")
                 return "plant_tariff"
         except Exception as e:
             # En caso de error, enrutar por defecto a requisitos
@@ -232,53 +240,30 @@ def capture_important_info(state: State) -> dict:
     messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
     #logger.info(f"messages: {messages}")
     question = state["input"]
-    # Prompt para extraer la información clave
-    system_prompt = f"""
-    Eres un asistente experto en analizar conversaciones para extraer información importante.
-
-    A continuación, se te proporciona el historial de una conversación con un usuario sobre revisiones técnicas vehiculares.
-
-    Tu tarea es extraer los siguientes detalles si están presentes:
-    - Tipo de vehículo: tienes una lista de opciones para elegir ("taxi", "transporte particular", "transporte  escolar, "transporte de trabajadores", "transporte turístico", "transporte mercancia general", "transporte mercancia peligrosa"), si te brindan un tipo de vehículo diferente, entonces clasificalo dentro de la lista de opciones proporcionadas.
-   - Ubicación del usuario: Extrae cualquier referencia a una ubicación donde se encuentra el usuario. Presta especial atención a frases como "estoy en", "vivo en", "me encuentro en", "cerca de", "mi ubicación es", "mi casa en", "estoy cerca de" seguidas de un nombre de distrito, zona o dirección en Lima. Incluye el nombre completo del distrito o zona mencionada.
-      Ejemplos:
-      - "Estoy en San Juan de Lurigancho" → "San Juan de Lurigancho"
-      - "Vivo en El Agustino" → "El Agustino"
-      - "estoy cerca del agustino" → "El Agustino"
-      - "Me encuentro en Comas" → "Comas"
-      - "¿Hay alguna planta cerca de Los Olivos?" → "Los Olivos"
-      - "av. los alamos 123"
-      - ""jr. los claveles 456"
-    - Ubicación de la planta (Ejemplo: "sjl", "trapiche", "carabayllo")
-    - Modelo del vehículo (Ejemplo: "toyota yaris", "hyundai accent", "kia rio")
-    - Año de fabricación del vehículo (Ejemplo: "2010", "2015", "2020")
-
-    Si algún dato no está disponible en la conversación, devuelve null para ese campo.
-    
-    pregunta: 
-    {question}
-    Conversación:
-    {messages}
-
-    Importante: 
-    1. No inventes información que no esté explícitamente mencionada en la conversación
-    2. Presta especial atención a las respuestas del usuario
-    """
+    previous_questions = state["previous_questions"]
 
     # Configuramos el LLM para obtener salida estructurada
     structured_llm = llm.with_structured_output(VehicleInfo)
 
+    system_instructions = IMPORTANT_INFO_PROMPT.format(
+        question=question,
+        messages=messages,
+        previous_questions=previous_questions
+    )
     # Invocamos el modelo
     result = structured_llm.invoke([
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=system_instructions),
         HumanMessage(content="Extrae los puntos clave de la conversación")
     ])
 
+    print("vehicle_type: ", result["vehicle_type"])
+    print("location: ", result["location"])
+    print("model: ", result["model"])
+    print("annual: ", result["annual"])
     # Con reducers, simplemente devolvemos los resultados
     # La función reducer se encargará de preservar los valores existentes
     return {
         "vehicle_type": result["vehicle_type"],
-        "plant_location": result["plant_location"],
         "location": result["location"],
         "model": result["model"],
         "annual": result["annual"]
@@ -520,13 +505,17 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
 
     human_message = f"Usando la información de las plantas cercanas a {location}, formula una respuesta amigable y detallada que ayude al usuario a encontrar la planta más conveniente."
 
-    structured_llm = llm.with_structured_output(PlantInfo)
+    #structured_llm = llm.with_structured_output(PlantInfo)
 
     result = llm.invoke([
         SystemMessage(content=system_instructions),
         HumanMessage(content=human_message)
     ])
-    logger.info(f"Este es el resultado '{result}'")
+    #logger.info(f"Este es el resultado '{result}'")
+    print("Este es el resultado: ", result)
+    print("location -> node: ", location)
+    print("vehicle_type -> node: ", vehicle_type)
+    print("plant_location -> node: ", plant_location)
     # Update state
     updated_messages = state.get("messages", []) + [
         HumanMessage(content=user_query),
@@ -536,7 +525,9 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     return {
         "answer": result.content,
         "messages": updated_messages,
-        "plant_location": plant_location
+        "plant_location": plant_location,
+        "location": location,
+        "vehicle_type": vehicle_type
     }
 
 def retrieve_context(state: State) -> dict:
@@ -614,7 +605,6 @@ def route_by_semantic(state: State) -> dict:
 
     # Use the semantic router to determine the route type
     route_name = ambiguity_router.route_query(user_query)
-    logger.info("current_topic111: ", route_name)
     return {"current_topic": route_name}
 
 
@@ -632,7 +622,7 @@ def route_by_semantic_type(state: State) -> str:
         Next node to execute: either "process_location" or "classify_ambiguity"
     """
     current_topic = state["current_topic"]
-    logger.info("current_topic: ", current_topic)
+    #logger.info("current_topic: ", current_topic)
     print("current_topicxxx: ", current_topic)
     # Special handling for location route
     if current_topic == "location":
@@ -658,11 +648,20 @@ def generate_response(state: State) -> Dict[str, Any]:
         llm = ChatOpenAI(model=LLM_MODEL)
         context = state["context"]
         summary = state["summary"]
-
+        vehicle_type = state["vehicle_type"]
+        location = state["location"]
+        plant_location = state["plant_location"]
+        user_query = state["input"]
+        previous_questions = state["previous_questions"]
         # Construir el mensaje del sistema con el contexto y resumen
         system_message = ASSISTANT_PROMPT.format(
             context=context,
-            chat_history=summary
+            chat_history=summary,
+            vehicle_type=vehicle_type,
+            location=location,
+            plant_location=plant_location,
+            user_query=user_query,
+            previous_questions=previous_questions
         )
 
         # Limitar la cantidad de mensajes en el historial

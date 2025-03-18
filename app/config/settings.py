@@ -27,6 +27,7 @@ API_WORKERS = int(os.getenv("API_WORKERS", "2"))
 
 # LLM settings
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+LLM_MODEL_LARGE = os.getenv("LLM_MODEL_LARGE", "gpt-4o")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 #VECTOR STORE

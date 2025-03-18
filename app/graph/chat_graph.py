@@ -27,9 +27,11 @@ def should_summarize(state: State) -> str:
     """Decide si resumir o continuar."""
     return "summarize_conversation" if len(state["messages"]) > 6 else "generate_response"
 
+
 def should_ambiguity(state: State) -> str:
     """Decide si resumir o continuar."""
     return "ask_clarification" if state["ambiguity_classification"]["is_ambiguous"] else "generate_response"
+
 
 def create_chat_graph():
     """
