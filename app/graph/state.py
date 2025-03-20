@@ -28,6 +28,9 @@ class PlantInfo(TypedDict):
     near_plant: Optional[str]
     answer: Optional[str]
 
+class MentionInfo(TypedDict):
+    answer: Optional[str]
+    message: Optional[str]
 
 class VehicleInfo(TypedDict):
     vehicle_type: Optional[str]  # tipo de vehículo (taxi, particular, etc.)
@@ -37,11 +40,10 @@ class VehicleInfo(TypedDict):
     annual: Optional[str]  # año de fabricación del vehículo
 
 
-class PlantInfo(TypedDict):
-    price: Optional[str]  # precio del vehículo
-    location: Optional[str]  # ubicación del vehículo
-    plant_location: Optional[str]  # ubicación de la planta
-
+class LocationInfo(TypedDict):
+    current_topic: Optional[str]  # precio del vehículo
+    answer: Optional[str]
+    nearest_plants: List[str]
 
 class State(TypedDict):
     input: str
@@ -61,3 +63,4 @@ class State(TypedDict):
     model: Optional[str]  # modelo del vehículo
     annual: Optional[str]  # año de fabricación del vehículo
     current_topic: Optional[str]
+    nearest_plants: List[str]

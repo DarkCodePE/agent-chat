@@ -11,7 +11,7 @@ from langchain_qdrant import Qdrant
 from numpy.f2py.crackfortran import previous_context
 from qdrant_client import QdrantClient
 
-from app.graph.state import State, AmbiguityClassification, VehicleInfo, PlantInfo
+from app.graph.state import State, AmbiguityClassification, VehicleInfo, PlantInfo, LocationInfo
 from app.config.settings import LLM_MODEL, QDRANT_URL, QDRANT_API_KEY
 
 from app.services.document_service import DocumentService
@@ -383,7 +383,9 @@ def classify_ambiguity(state: State) -> dict:
     else:
         # Default prompt para casos no manejados
         prompt_template = AMBIGUITY_CLASSIFIER_PROMPT_REQUIREMENT
+
     #logger.info(f"Prompt template: {prompt_template}")
+    recent_messages = state["messages"][-7:] if len(state["messages"]) > 7 else state["messages"]
     # Configurar el modelo para salida estructurada
     structured_llm = llm.with_structured_output(AmbiguityClassification)
 
@@ -398,6 +400,7 @@ def classify_ambiguity(state: State) -> dict:
         plant_location=plant_location,
         model=model,
         annual=annual,
+        recent_messages=recent_messages,
     )
     # print("system_instructions: ", system_instructions)
     # Invocar el modelo
@@ -409,7 +412,7 @@ def classify_ambiguity(state: State) -> dict:
     return {"ambiguity_classification": result}
 
 
-def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant_tariff", "welcome"]]:
+def route_desired_info(state: State) -> dict[str, Literal["requirements", "plant_tariff", "welcome","location"]]:
     """
     Route the user query to the desired information based on the context.
 
@@ -526,7 +529,7 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     location = state["location"]
     model = state["model"]
     annual = state["annual"]
-    #plant_location = state["plant_location"]
+    plant_location = state["plant_location"]
     previous_questions = state["previous_questions"]
     previous_categories = state["previous_categories"]
     #current_topic = state["current_topic"]
@@ -546,23 +549,9 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     # Get the 3 nearest plants
     nearest_plants = sorted_plants[:3]
 
-    # Format response for user
-    response = f"Las plantas más cercanas a {location} son:\n\n"
+    # Limitar la cantidad de mensajes en el historial
+    recent_messages = state["messages"][-7:] if len(state["messages"]) > 7 else state["messages"]
 
-    for i, plant in enumerate(nearest_plants, 1):
-        response += f"{i}. {plant['name']}\n"
-        response += f"   📍 Dirección: {plant['address']}\n"
-
-        if plant.get("distance_text") != "No disponible":
-            response += f"   🚗 Distancia: {plant['distance_text']} (aprox. {plant['duration_text']} en auto)\n"
-        else:
-            response += f"   🚗 Distancia: Información no disponible\n"
-
-        response += f"   📞 Teléfono: {plant['phone']}\n"
-        response += f"   ⏰ Horario: {plant['hours']}\n\n"
-
-    # Add note about driving conditions
-    response += "Los tiempos son estimados y pueden variar según el tráfico y las condiciones de la vía."
     system_instructions = AMBIGUITY_CLASSIFIER_PROMPT_LOCATION.format(
         user_query=user_query,
         retrieved_context=context,
@@ -570,18 +559,20 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
         previous_categories=previous_categories,
         vehicle_type=vehicle_type,
         location=location,
-        plant_location=nearest_plants,
+        nearest_plants=nearest_plants,
+        plant_location=plant_location,
         model=model,
         annual=annual,
+        recent_messages=recent_messages
     )
     # Save the plant_location for future reference
     plant_location = nearest_plants[0]["id"] if nearest_plants else None
 
     human_message = f"Usando la información de las plantas cercanas a {location}, formula una respuesta amigable y detallada que ayude al usuario a encontrar la planta más conveniente."
 
-    #structured_llm = llm.with_structured_output(PlantInfo)
+    structured_llm = llm.with_structured_output(LocationInfo)
 
-    result = llm.invoke([
+    result = structured_llm.invoke([
         SystemMessage(content=system_instructions),
         HumanMessage(content=human_message)
     ])
@@ -593,15 +584,14 @@ def process_location_node_v2(state: State) -> Dict[str, Any]:
     # Update state
     updated_messages = state.get("messages", []) + [
         HumanMessage(content=user_query),
-        AIMessage(content=response)
+        AIMessage(content=result["answer"])
     ]
 
     return {
-        "answer": result.content,
+        "answer": result["answer"],
         "messages": updated_messages,
-        "plant_location": plant_location,
-        "location": location,
-        "vehicle_type": vehicle_type
+        "current_topic": result["current_topic"],
+        "nearest_plants": result["nearest_plants"],
     }
 
 def retrieve_context(state: State) -> dict:
@@ -727,6 +717,9 @@ def generate_response(state: State) -> Dict[str, Any]:
         plant_location = state["plant_location"]
         user_query = state["input"]
         previous_questions = state["previous_questions"]
+        # Limitar la cantidad de mensajes en el historial
+        recent_messages = state["messages"][-7:] if len(state["messages"]) > 7 else state["messages"]
+
         # Construir el mensaje del sistema con el contexto y resumen
         system_message = ASSISTANT_PROMPT.format(
             context=context,
@@ -735,11 +728,9 @@ def generate_response(state: State) -> Dict[str, Any]:
             location=location,
             plant_location=plant_location,
             user_query=user_query,
-            previous_questions=previous_questions
+            previous_questions=previous_questions,
+            recent_messages=recent_messages
         )
-
-        # Limitar la cantidad de mensajes en el historial
-        recent_messages = state["messages"][-5:] if len(state["messages"]) > 5 else state["messages"]
 
         # Construir el prompt con historial y nuevo input
         prompt = ChatPromptTemplate.from_messages([

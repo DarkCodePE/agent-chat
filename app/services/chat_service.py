@@ -51,7 +51,9 @@ def process_message(
             "documents": [],
             "web_search": "No",
             "summary": "",  # Make sure all expected state fields are initialized
-            "plant_location": plant_location
+            "summary": "",  # Make sure all expected state fields are initialized
+            "plant_location": plant_location,
+            "current_topic": ""
         }
         logger.info(f"Initial state prepared for thread {thread_id}")
 

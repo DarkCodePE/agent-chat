@@ -31,3 +31,4 @@ google-auth
 google-api-python-client
 python-dateutil
 semantic-router
+langgraph-cli[inmem]
